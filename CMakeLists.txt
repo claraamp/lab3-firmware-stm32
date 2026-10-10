@@ -37,6 +37,27 @@ add_executable(${CMAKE_PROJECT_NAME})
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
 
+# CMSIS-DSP (copied from STM32Cube_FW_F4_V1.28.3), built from the per-module
+# aggregate sources. Kept out of cmake/stm32cubemx because CubeMX regenerates it.
+set(CMSISDSP_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/CMSIS/DSP)
+add_library(CMSISDSP STATIC
+    ${CMSISDSP_DIR}/Source/BasicMathFunctions/BasicMathFunctions.c
+    ${CMSISDSP_DIR}/Source/CommonTables/CommonTables.c
+    ${CMSISDSP_DIR}/Source/ComplexMathFunctions/ComplexMathFunctions.c
+    ${CMSISDSP_DIR}/Source/FastMathFunctions/FastMathFunctions.c
+    ${CMSISDSP_DIR}/Source/FilteringFunctions/FilteringFunctions.c
+    ${CMSISDSP_DIR}/Source/StatisticsFunctions/StatisticsFunctions.c
+    ${CMSISDSP_DIR}/Source/SupportFunctions/SupportFunctions.c
+    ${CMSISDSP_DIR}/Source/TransformFunctions/TransformFunctions.c
+)
+target_include_directories(CMSISDSP
+    PUBLIC  ${CMSISDSP_DIR}/Include
+    PRIVATE ${CMSISDSP_DIR}/PrivateInclude
+    PUBLIC  ${CMAKE_CURRENT_SOURCE_DIR}/Drivers/CMSIS/Include
+)
+# Always optimized, even in Debug, so DWT cycle counts are realistic
+target_compile_options(CMSISDSP PRIVATE -O3)
+
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined library search paths
@@ -65,4 +86,5 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     stm32cubemx
 
     # Add user defined libraries
+    CMSISDSP
 )

@@ -24,6 +24,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
+#include "arm_math.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -33,6 +34,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define FFT_LEN 512U
+#define FFT_BIN 32U
 
 /* USER CODE END PD */
 
@@ -44,6 +47,10 @@
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
+static arm_rfft_fast_instance_f32 fft;
+static float32_t fft_in[FFT_LEN];
+static float32_t fft_out[FFT_LEN];
+static float32_t fft_mag[FFT_LEN / 2];
 
 /* USER CODE END PV */
 
@@ -55,6 +62,20 @@ void SystemClock_Config(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+static void fft_fill_sine(void)
+{
+  for (uint32_t n = 0; n < FFT_LEN; n++)
+  {
+    fft_in[n] = arm_sin_f32(2.0f * PI * (float32_t)(FFT_BIN * n) / (float32_t)FFT_LEN);
+  }
+}
+
+static void dwt_init(void)
+{
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
 
 /* USER CODE END 0 */
 
@@ -91,6 +112,10 @@ int main(void)
   /* USER CODE BEGIN 2 */
   const char hello[] = "hello frente1\r\n";
   HAL_UART_Transmit(&huart1, (uint8_t *)hello, sizeof(hello) - 1, HAL_MAX_DELAY);
+
+  dwt_init();
+  arm_rfft_fast_init_f32(&fft, FFT_LEN);
+  uint32_t last_fft = HAL_GetTick();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -109,6 +134,37 @@ int main(void)
   HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, (n & 1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, (n & 1) ? GPIO_PIN_RESET : GPIO_PIN_SET);
   n++;
+
+  if (HAL_GetTick() - last_fft >= 1000U)
+  {
+    last_fft += 1000U;
+
+    /* arm_rfft_fast_f32 overwrites its input, so regenerate it every run */
+    fft_fill_sine();
+    uint32_t t0 = DWT->CYCCNT;
+    arm_rfft_fast_f32(&fft, fft_in, fft_out, 0);
+    uint32_t cycles = DWT->CYCCNT - t0;
+
+    /* out[0] = DC and out[1] = Nyquist (both real); bins 1..255 are re,im pairs */
+    arm_cmplx_mag_f32(fft_out, fft_mag, FFT_LEN / 2);
+    fft_mag[0] = fabsf(fft_out[0]);
+
+    float32_t peak;
+    uint32_t peak_bin;
+    arm_max_f32(fft_mag, FFT_LEN / 2, &peak, &peak_bin);
+
+    /* nano.specs printf has no %f: print fixed point by hand */
+    uint32_t us_x10 = (uint32_t)(((uint64_t)cycles * 10U + SystemCoreClock / 2000000U) / (SystemCoreClock / 1000000U));
+    uint32_t mag_x10 = (uint32_t)(peak * 10.0f + 0.5f);
+    char line[80];
+    int flen = snprintf(line, sizeof line, "fft512 ciclos=%lu us=%lu.%lu pico_bin=%lu mag=%lu.%lu\r\n",
+                        (unsigned long)cycles,
+                        (unsigned long)(us_x10 / 10U), (unsigned long)(us_x10 % 10U),
+                        (unsigned long)peak_bin,
+                        (unsigned long)(mag_x10 / 10U), (unsigned long)(mag_x10 % 10U));
+    HAL_UART_Transmit(&huart1, (uint8_t *)line, flen, HAL_MAX_DELAY);
+  }
+
   HAL_Delay(500);
   }
   /* USER CODE END 3 */
