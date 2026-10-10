@@ -98,6 +98,9 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
+  HAL_GPIO_TogglePin(LED_PLACA_GPIO_Port, LED_PLACA_Pin);
+  HAL_Delay(500);
+
     /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
