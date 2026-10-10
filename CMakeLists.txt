@@ -57,6 +57,18 @@ target_include_directories(CMSISDSP
 )
 # Always optimized, even in Debug, so DWT cycle counts are realistic
 target_compile_options(CMSISDSP PRIVATE -O3)
+# Only keep the tables needed by a 512-point real FFT (complex 256-point core)
+# and by arm_sin_f32; any other arm_rfft_fast_init_f32 length now returns
+# ARM_MATH_ARGUMENT_ERROR
+target_compile_definitions(CMSISDSP PUBLIC
+    ARM_DSP_CONFIG_TABLES
+    ARM_FFT_ALLOW_TABLES
+    ARM_TABLE_TWIDDLECOEF_F32_256
+    ARM_TABLE_BITREVIDX_FLT_256
+    ARM_TABLE_TWIDDLECOEF_RFFT_F32_512
+    ARM_FAST_ALLOW_TABLES
+    ARM_TABLE_SIN_F32
+)
 
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE

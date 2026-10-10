@@ -114,7 +114,10 @@ int main(void)
   HAL_UART_Transmit(&huart1, (uint8_t *)hello, sizeof(hello) - 1, HAL_MAX_DELAY);
 
   dwt_init();
-  arm_rfft_fast_init_f32(&fft, FFT_LEN);
+  arm_status fft_status = arm_rfft_fast_init_f32(&fft, FFT_LEN);
+  char status_line[32];
+  int slen = snprintf(status_line, sizeof status_line, "fft_init status=%d\r\n", (int)fft_status);
+  HAL_UART_Transmit(&huart1, (uint8_t *)status_line, slen, HAL_MAX_DELAY);
   uint32_t last_fft = HAL_GetTick();
   /* USER CODE END 2 */
 
