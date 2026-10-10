@@ -23,7 +23,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -89,7 +89,8 @@ int main(void)
   MX_GPIO_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
-
+  const char hello[] = "hello frente1\r\n";
+  HAL_UART_Transmit(&huart1, (uint8_t *)hello, sizeof(hello) - 1, HAL_MAX_DELAY);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -98,10 +99,17 @@ int main(void)
   {
     /* USER CODE END WHILE */
 
-  HAL_GPIO_TogglePin(LED_PLACA_GPIO_Port, LED_PLACA_Pin);
-  HAL_Delay(500);
-
     /* USER CODE BEGIN 3 */
+    static uint32_t n = 0;
+  char buf[32];
+  int len = snprintf(buf, sizeof buf, "tick %lu\r\n", (unsigned long)n);
+  HAL_UART_Transmit(&huart1, (uint8_t *)buf, len, HAL_MAX_DELAY);
+
+  HAL_GPIO_TogglePin(LED_PLACA_GPIO_Port, LED_PLACA_Pin);
+  HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, (n & 1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, (n & 1) ? GPIO_PIN_RESET : GPIO_PIN_SET);
+  n++;
+  HAL_Delay(500);
   }
   /* USER CODE END 3 */
 }
