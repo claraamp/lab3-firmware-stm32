@@ -10,3 +10,11 @@ build/
 *.list
 *.su
 *.cyclo
+# KiCad
+*.kicad_prl
+*-backups/
+_autosave-*
+*.lck
+fp-info-cache
+.history/
+*.bak
