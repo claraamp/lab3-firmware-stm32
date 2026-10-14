@@ -37,7 +37,14 @@ int marco_cabecalhos_coerentes(void);
 /* Calcula o escore do segmento i e compara com a referencia. */
 void marco_avaliar(uint16_t i, marco_resultado_t *r);
 
-/* Escreve v com `casas` casas decimais (o printf do nano.specs nao tem %f). */
+/* A comparacao em si, separada dos vetores de teste para poder ser testada com
+ * uma referencia qualquer (inclusive uma que tem que reprovar). */
+void marco_comparar(float escore, float ref, float tol, uint8_t falha_ref,
+                    marco_resultado_t *r);
+
+/* Escreve v com `casas` casas decimais (o printf do nano.specs nao tem %f).
+ * Faixa: |v| * 10^casas < 4e9 (cabe em uint32_t); acima disso escreve "inf".
+ * Com 6 casas, o limite e |v| < ~4000; com 3 casas, |v| < ~4e6. */
 int marco_fmt_fixo(char *buf, size_t n, float v, unsigned casas);
 
 /* Linha da serial de um segmento. */

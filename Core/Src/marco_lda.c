@@ -42,13 +42,19 @@ int marco_cabecalhos_coerentes(void)
     return lda_bias == VT_LDA_BIAS;
 }
 
-static void preencher(uint16_t i, float escore, marco_resultado_t *r)
+void marco_comparar(float escore, float ref, float tol, uint8_t falha_ref,
+                    marco_resultado_t *r)
 {
     r->escore = escore;
-    r->dif = fabsf(escore - vt_escore_ref[i]);
+    r->dif = fabsf(escore - ref);
     r->falha = (uint8_t)lda_e_falha(escore);
-    r->ok_escore = (uint8_t)(r->dif <= vt_tolerancia[i]);
-    r->ok_decisao = (uint8_t)(r->falha == vt_falha_ref[i]);
+    r->ok_escore = (uint8_t)(r->dif <= tol);
+    r->ok_decisao = (uint8_t)(r->falha == falha_ref);
+}
+
+static void preencher(uint16_t i, float escore, marco_resultado_t *r)
+{
+    marco_comparar(escore, vt_escore_ref[i], vt_tolerancia[i], vt_falha_ref[i], r);
 }
 
 void marco_avaliar(uint16_t i, marco_resultado_t *r)
@@ -120,6 +126,8 @@ static void leds(int verde, int vermelho)
     HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, vermelho ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
+/* Repete o dwt_init() do main.c de proposito: o modulo nao depende de quem o
+ * chama ter ligado o contador antes. */
 static void dwt_ligar(void)
 {
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;

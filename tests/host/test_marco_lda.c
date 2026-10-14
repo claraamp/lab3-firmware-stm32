@@ -26,6 +26,42 @@ static void confere_fmt(float v, unsigned casas, const char *esperado)
     }
 }
 
+/* Caminho FALHOU: a comparacao tem que reprovar quando deve. */
+static void confere_reprova(void)
+{
+    marco_resultado_t r;
+    const float ref = 1400.0f, tol = 0.015f;
+
+    marco_comparar(ref + 0.010f, ref, tol, 1u, &r);     /* dentro da tolerancia */
+    if (!(r.ok_escore && r.ok_decisao)) {
+        printf("reprovou um escore dentro da tolerancia\n");
+        falhas++;
+    }
+    marco_comparar(ref + 0.020f, ref, tol, 1u, &r);     /* fora da tolerancia */
+    if (r.ok_escore || !r.ok_decisao) {
+        printf("aprovou um escore fora da tolerancia\n");
+        falhas++;
+    }
+    marco_comparar(ref, ref, tol, 0u, &r);              /* decisao trocada */
+    if (!r.ok_escore || r.ok_decisao) {
+        printf("aprovou uma decisao diferente da referencia\n");
+        falhas++;
+    }
+    marco_comparar(0.0f, 0.0f, tol, 1u, &r);            /* empate: escore 0 e falha */
+    if (!(r.falha && r.ok_decisao)) {
+        printf("escore 0 nao foi falha\n");
+        falhas++;
+    }
+    marco_comparar(-1300.0f, -1300.0f, tol, 0u, &r);
+    r.ok_escore = 0u;                                   /* a linha da serial tem que dizer FALHOU */
+    char linha[200];
+    marco_linha(linha, sizeof linha, "seg", 0u, &r, 0u);
+    if (strstr(linha, " FALHOU ") == NULL) {
+        printf("linha sem FALHOU: %s", linha);
+        falhas++;
+    }
+}
+
 int main(void)
 {
     confere_fmt(-1577.95867f, 3, "-1577.959");
@@ -34,6 +70,8 @@ int main(void)
     confere_fmt(-0.0000001f, 3, "0.000");        /* sem "-0.000" */
     confere_fmt(2527.68311f, 0, "2528");
     confere_fmt(0.05f, 1, "0.1");
+    confere_fmt(5000.0f, 6, "inf");             /* fora da faixa com 6 casas */
+    confere_reprova();
 
     if (!marco_cabecalhos_coerentes()) {
         printf("cabecalhos de modelos diferentes\n");
