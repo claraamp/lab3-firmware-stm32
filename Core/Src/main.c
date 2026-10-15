@@ -25,6 +25,7 @@
 /* USER CODE BEGIN Includes */
 #include <stdio.h>
 #include "arm_math.h"
+#include "marco_lda.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -77,6 +78,35 @@ static void dwt_init(void)
   DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
 }
 
+/* Teste da FFT da Frente 1: seno no bin 32, espera pico no bin 32 com magnitude 256,0 */
+static void fft_teste(void)
+{
+  /* arm_rfft_fast_f32 overwrites its input, so regenerate it every run */
+  fft_fill_sine();
+  uint32_t t0 = DWT->CYCCNT;
+  arm_rfft_fast_f32(&fft, fft_in, fft_out, 0);
+  uint32_t cycles = DWT->CYCCNT - t0;
+
+  /* out[0] = DC and out[1] = Nyquist (both real); bins 1..255 are re,im pairs */
+  arm_cmplx_mag_f32(fft_out, fft_mag, FFT_LEN / 2);
+  fft_mag[0] = fabsf(fft_out[0]);
+
+  float32_t peak;
+  uint32_t peak_bin;
+  arm_max_f32(fft_mag, FFT_LEN / 2, &peak, &peak_bin);
+
+  /* nano.specs printf has no %f: print fixed point by hand */
+  uint32_t us_x10 = (uint32_t)(((uint64_t)cycles * 10U + SystemCoreClock / 2000000U) / (SystemCoreClock / 1000000U));
+  uint32_t mag_x10 = (uint32_t)(peak * 10.0f + 0.5f);
+  char line[80];
+  int flen = snprintf(line, sizeof line, "fft512 ciclos=%lu us=%lu.%lu pico_bin=%lu mag=%lu.%lu\r\n",
+                      (unsigned long)cycles,
+                      (unsigned long)(us_x10 / 10U), (unsigned long)(us_x10 % 10U),
+                      (unsigned long)peak_bin,
+                      (unsigned long)(mag_x10 / 10U), (unsigned long)(mag_x10 % 10U));
+  HAL_UART_Transmit(&huart1, (uint8_t *)line, flen, HAL_MAX_DELAY);
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -118,7 +148,10 @@ int main(void)
   char status_line[32];
   int slen = snprintf(status_line, sizeof status_line, "fft_init status=%d\r\n", (int)fft_status);
   HAL_UART_Transmit(&huart1, (uint8_t *)status_line, slen, HAL_MAX_DELAY);
-  uint32_t last_fft = HAL_GetTick();
+  fft_teste();
+
+  /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */
+  const int marco_ok = marco_lda_verificar();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -128,47 +161,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    static uint32_t n = 0;
-  char buf[32];
-  int len = snprintf(buf, sizeof buf, "tick %lu\r\n", (unsigned long)n);
-  HAL_UART_Transmit(&huart1, (uint8_t *)buf, len, HAL_MAX_DELAY);
-
-  HAL_GPIO_TogglePin(LED_PLACA_GPIO_Port, LED_PLACA_Pin);
-  HAL_GPIO_WritePin(LED_G_GPIO_Port, LED_G_Pin, (n & 1) ? GPIO_PIN_SET : GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, (n & 1) ? GPIO_PIN_RESET : GPIO_PIN_SET);
-  n++;
-
-  if (HAL_GetTick() - last_fft >= 1000U)
-  {
-    last_fft += 1000U;
-
-    /* arm_rfft_fast_f32 overwrites its input, so regenerate it every run */
-    fft_fill_sine();
-    uint32_t t0 = DWT->CYCCNT;
-    arm_rfft_fast_f32(&fft, fft_in, fft_out, 0);
-    uint32_t cycles = DWT->CYCCNT - t0;
-
-    /* out[0] = DC and out[1] = Nyquist (both real); bins 1..255 are re,im pairs */
-    arm_cmplx_mag_f32(fft_out, fft_mag, FFT_LEN / 2);
-    fft_mag[0] = fabsf(fft_out[0]);
-
-    float32_t peak;
-    uint32_t peak_bin;
-    arm_max_f32(fft_mag, FFT_LEN / 2, &peak, &peak_bin);
-
-    /* nano.specs printf has no %f: print fixed point by hand */
-    uint32_t us_x10 = (uint32_t)(((uint64_t)cycles * 10U + SystemCoreClock / 2000000U) / (SystemCoreClock / 1000000U));
-    uint32_t mag_x10 = (uint32_t)(peak * 10.0f + 0.5f);
-    char line[80];
-    int flen = snprintf(line, sizeof line, "fft512 ciclos=%lu us=%lu.%lu pico_bin=%lu mag=%lu.%lu\r\n",
-                        (unsigned long)cycles,
-                        (unsigned long)(us_x10 / 10U), (unsigned long)(us_x10 % 10U),
-                        (unsigned long)peak_bin,
-                        (unsigned long)(mag_x10 / 10U), (unsigned long)(mag_x10 % 10U));
-    HAL_UART_Transmit(&huart1, (uint8_t *)line, flen, HAL_MAX_DELAY);
-  }
-
-  HAL_Delay(500);
+    marco_lda_passo(marco_ok);
   }
   /* USER CODE END 3 */
 }
