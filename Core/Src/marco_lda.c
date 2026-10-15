@@ -138,9 +138,13 @@ static void dwt_ligar(void)
 static uint32_t avaliar_medindo(uint16_t i, marco_resultado_t *r, uint32_t custo_leitura)
 {
     const float *x = vt_x[i];
-    /* As barreiras impedem o compilador de trazer para dentro da medicao o
-     * calculo do endereco ou as leituras de preencher(). */
-    __asm volatile("" ::: "memory");
+    /* Barreiras em volta da janela do DWT. Um "memory" sozinho so impede o
+     * compilador de mover acessos a memoria; contas em registrador (como o
+     * endereco de vt_x[i]) ainda poderiam cair entre t0 e a chamada. O "+r"(x)
+     * obriga o endereco a estar pronto num registrador antes de ler t0. A
+     * segunda barreira impede que as leituras de preencher() subam para dentro
+     * da janela. */
+    __asm volatile("" : "+r"(x) :: "memory");
     const uint32_t t0 = DWT->CYCCNT;
     const float s = escore_opaco(x);
     const uint32_t t1 = DWT->CYCCNT;
