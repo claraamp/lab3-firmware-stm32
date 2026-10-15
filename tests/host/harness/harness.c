@@ -47,6 +47,19 @@ static const char *const NOME[N_ESTAGIOS] = {
     "escala", "janela", "espectro", "mel", "logmel", "mfcc", "media", "desvio", "escore"};
 /* 1 = ja portado em mfcc_estagios.c (ou, no escore, lda_modelo.h presente) */
 static const int PORTADO[N_ESTAGIOS] = {1, 1, 1, 0, 0, 0, 1, 1, TEM_LDA};
+/* linhas x colunas de cada referencia: os buffers do harness tem esse tamanho fixo,
+ * entao um indice.txt com outra forma e recusado antes de qualquer leitura */
+static const int FORMA[N_ESTAGIOS][2] = {
+    {1, MFCC_N_AMOSTRAS},              /* escala */
+    {MFCC_N_QUADROS, MFCC_N_QUADRO},   /* janela */
+    {MFCC_N_QUADROS, MFCC_N_BINS},     /* espectro */
+    {MFCC_N_QUADROS, MFCC_N_MEL},      /* mel */
+    {MFCC_N_QUADROS, MFCC_N_MEL},      /* logmel */
+    {MFCC_N_QUADROS, MFCC_N_COEFS},    /* mfcc */
+    {1, MFCC_N_COEFS},                 /* media */
+    {1, MFCC_N_COEFS},                 /* desvio */
+    {1, 1},                            /* escore */
+};
 
 enum { ISOLADO, ENCADEADO };
 static const char *const NOME_MODO[2] = {"isolado", "encadeado"};
@@ -75,6 +88,7 @@ typedef struct {
 } resultado_t;
 
 static tolerancia_t tolerancia[N_ESTAGIOS];
+static int referencia_invalida = 0;   /* ha referencia em que a metrica nao se aplica */
 static resultado_t resultado[2][N_ESTAGIOS];
 static int verboso = 0;
 
@@ -190,7 +204,18 @@ static int ler_segmento(const char *refs, const char *pasta, segmento_t *s)
             continue;
         }
         int e = indice_estagio(nome);
-        if (e < 0 || strcmp(tipo, "f64") != 0 || n <= 0 || m <= 0) {
+        if (e < 0) {
+            continue;
+        }
+        if (strcmp(tipo, "f64") != 0 || n != FORMA[e][0] || m != FORMA[e][1]) {
+            fprintf(stderr, "erro: %s: %s e %s %dx%d; o harness espera f64 %dx%d\n", pasta, NOME[e],
+                    tipo, n, m, FORMA[e][0], FORMA[e][1]);
+            erro = 1;
+            continue;
+        }
+        if (s->m[e].d) {
+            fprintf(stderr, "erro: %s: estagio %s repetido no indice.txt\n", pasta, NOME[e]);
+            erro = 1;
             continue;
         }
         s->m[e].linhas = n;
@@ -222,27 +247,38 @@ static int ler_segmento(const char *refs, const char *pasta, segmento_t *s)
 /* Metrica do A4 (igual a dsp.erro_estagio do Python):
  *   rel_quadro: por linha, max|c - r| / max|r|; vale a pior linha;
  *   abs:        max|c - r|;
- *   rel:        max|c - r| / |r|, elemento a elemento. */
+ *   rel:        max|c - r| / |r|, elemento a elemento.
+ * Como no Python, a metrica nao se aplica a uma referencia com zero (rel) ou a um
+ * quadro de referencia todo em zero (rel_quadro): devolve -1 e o chamador avisa. */
 static double metrica_a4(const char *metrica, const float *c, const matriz_t *r)
 {
     double pior = 0.0;
     for (int i = 0; i < r->linhas; ++i) {
         double dif_max = 0.0, escala = 0.0, rel_max = 0.0;
+        int tem_zero = 0;
         for (int j = 0; j < r->colunas; ++j) {
             const double ref = r->d[i * r->colunas + j];
             const double d = fabs((double)c[i * r->colunas + j] - ref);
             dif_max = d > dif_max ? d : dif_max;
             escala = fabs(ref) > escala ? fabs(ref) : escala;
-            if (ref != 0.0 && d / fabs(ref) > rel_max) {
+            if (ref == 0.0) {
+                tem_zero = 1;
+            } else if (d / fabs(ref) > rel_max) {
                 rel_max = d / fabs(ref);
             }
         }
         double v;
         if (strcmp(metrica, "rel_quadro") == 0) {
-            v = escala > 0.0 ? dif_max / escala : HUGE_VAL;
+            if (escala == 0.0) {
+                return -1.0;
+            }
+            v = dif_max / escala;
         } else if (strcmp(metrica, "abs") == 0) {
             v = dif_max;
         } else {
+            if (tem_zero) {
+                return -1.0;
+            }
             v = rel_max;
         }
         pior = v > pior ? v : pior;
@@ -260,6 +296,13 @@ static void comparar(int modo, int e, const float *c, const segmento_t *s)
         escala = fabs(r->d[k]) > escala ? fabs(r->d[k]) : escala;
     }
     const double met = metrica_a4(tolerancia[e].metrica, c, r);
+    if (met < 0.0) {
+        fprintf(stderr, "erro: %s, estagio %s: referencia com zero; a metrica %s nao se aplica "
+                "(o dsp.erro_estagio do Python recusa o mesmo caso)\n", s->pasta, NOME[e],
+                tolerancia[e].metrica);
+        referencia_invalida = 1;
+        return;
+    }
     const double rel = escala > 0.0 ? dif_max / escala : 0.0;
     resultado_t *res = &resultado[modo][e];
     res->erro_abs = dif_max > res->erro_abs ? dif_max : res->erro_abs;
@@ -309,7 +352,7 @@ static void rodar_isolado(const segmento_t *s)
     }
     comparar(ISOLADO, ESPECTRO, &espectro_c[0][0], s);
 
-    /* mel, logmel e mfcc: ainda nao portados (blocos 4 a 6) */
+    /* mel, logmel e mfcc: ainda nao portados (Mel e o bloco 3; log e DCT, os blocos 4 e 5) */
 
     /* media e desvio: recebem o MFCC de referencia */
     float media[MFCC_N_COEFS], desvio[MFCC_N_COEFS];
@@ -380,30 +423,41 @@ static int relatar(int modo, int ultimo_encadeado)
     return falhas;
 }
 
+/* modelo.txt: de que modelo sao as referencias. Obrigatorio, como o tolerancias.txt;
+ * com o lda_modelo.h presente, o bias tem que ser o dele. */
 static int conferir_modelo(const char *refs)
 {
-#if TEM_LDA
-    char caminho[MAX_CAMINHO], linha[128];
+    char caminho[MAX_CAMINHO], linha[128], id[64] = "", sha[64] = "";
+    float bias = 0.0f;
+    int tem_bias = 0;
     juntar(caminho, refs, "modelo.txt");
     FILE *f = fopen(caminho, "r");
     if (!f) {
-        return 0;
+        fprintf(stderr, "erro: nao abri %s; sem ele nao se sabe de que modelo sao as referencias\n",
+                caminho);
+        return -1;
     }
-    int ok = 1;
     while (fgets(linha, sizeof linha, f)) {
-        float bias;
-        if (sscanf(linha, "bias %f", &bias) == 1 && bias != lda_bias) {
-            fprintf(stderr, "erro: as referencias sao de outro modelo (bias %.9g, lda_modelo.h %.9g)\n",
-                    (double)bias, (double)lda_bias);
-            ok = 0;
+        if (sscanf(linha, "bias %f", &bias) == 1) {
+            tem_bias = 1;
         }
+        sscanf(linha, "id %63s", id);
+        sscanf(linha, "json_sha256_12 %63s", sha);
     }
     fclose(f);
-    return ok ? 0 : -1;
-#else
-    (void)refs;
-    return 0;
+    if (!tem_bias || id[0] == '\0') {
+        fprintf(stderr, "erro: %s sem o id ou o bias do modelo\n", caminho);
+        return -1;
+    }
+    printf("modelo das referencias: %s (json %s)\n", id, sha[0] ? sha : "?");
+#if TEM_LDA
+    if (bias != lda_bias) {
+        fprintf(stderr, "erro: as referencias sao de outro modelo (bias %.9g, lda_modelo.h %.9g)\n",
+                (double)bias, (double)lda_bias);
+        return -1;
+    }
 #endif
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -433,6 +487,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "erro: arm_rfft_fast_init_f32 falhou para N = %d\n", MFCC_N_FFT);
         return 2;
     }
+    printf("harness: referencias em %s\n", refs);
     if (ler_tolerancias(refs) != 0 || conferir_modelo(refs) != 0) {
         return 2;
     }
@@ -446,7 +501,6 @@ int main(int argc, char **argv)
     }
     static segmento_t seg;
     int n_seg = 0, ultimo = ESCALA;
-    printf("harness: referencias em %s\n", refs);
     while (fscanf(lista, "%255s", pasta) == 1) {
         if (ler_segmento(refs, pasta, &seg) != 0) {
             fclose(lista);
@@ -474,6 +528,10 @@ int main(int argc, char **argv)
         if (modos[m]) {
             falhas += relatar(m, ultimo);
         }
+    }
+    if (referencia_invalida) {
+        printf("\nHARNESS: referencias invalidas para a metrica do A4 (ver os erros acima)\n");
+        return 2;
     }
     printf("\n%s\n", falhas ? "HARNESS FALHOU" : "HARNESS OK (estagios portados dentro da tolerancia)");
     return falhas ? 1 : 0;

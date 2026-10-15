@@ -6,9 +6,9 @@
  * (tests/host/harness) e depois usado na placa. Sem HAL: compila no PC com a
  * implementacao generica em C da CMSIS-DSP.
  *
- * Portados: escala, janela, espectro e resumo (media e desvio por Welford).
- * Faltam os blocos 4 a 6: banco de Mel, log e DCT (o harness os mostra como
- * "nao portado" ate existirem aqui).
+ * Portados: escala, janela, espectro e resumo (media e desvio por Welford, o
+ * bloco 6). Faltam o banco de Mel (bloco 3), o log (bloco 4) e a DCT (bloco 5):
+ * o harness os mostra como "nao portado" ate existirem aqui.
  */
 
 #ifndef MFCC_ESTAGIOS_H
