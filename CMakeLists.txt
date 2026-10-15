@@ -78,7 +78,11 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    Core/Src/marco_lda.c
 )
+# Marco de 13/10 (LDA na placa): sempre otimizado, inclusive no Debug, para o
+# tempo do escore medido pelo DWT ser o do firmware final, como o CMSIS-DSP
+set_source_files_properties(Core/Src/marco_lda.c PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE

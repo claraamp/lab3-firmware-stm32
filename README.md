@@ -6,19 +6,52 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware ainda é a base da Fase 2 (Frente 1): placa configurada, serial, LEDs e CMSIS-DSP funcionando. A cadeia de MFCC e a LDA ainda não estão aqui.
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não está aqui; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final).
 
 Ao ligar, a placa:
 
-1. manda `hello frente1` e `fft_init status=0` pela serial;
-2. alterna os LEDs verde e vermelho a cada 0,5 s e manda uma linha `tick N` a cada troca;
-3. uma vez por segundo, roda uma FFT real de 512 pontos sobre um seno de teste no bin 32 e manda o resultado:
+1. manda `hello frente1`, `fft_init status=0` e uma linha da FFT de teste (seno no bin 32):
 
-```
-fft512 ciclos=35677 us=356.8 pico_bin=32 mag=256.0
+   ```
+   fft512 ciclos=35677 us=356.8 pico_bin=32 mag=256.0
+   ```
+
+   O pico no bin 32 com magnitude 256,0 (= N/2) é o valor teórico esperado.
+2. **confere a LDA em todos os segmentos** do `lda_vetores_teste.h`: calcula o escore com o `lda_escore()` do `lda_modelo.h`, compara com o escore do `escores_referencia.csv` e manda uma linha por segmento, um resumo e `MARCO OK` ou `MARCO FALHOU`:
+
+   ```
+   marco13 modelo=exp239 json=ee0c3e088366 n_features=26 segmentos=295 clock=100MHz
+   seg seg=0 grav=normal ref=-1577.959 placa=... dif=... tol=... dec=normal OK ciclos=...
+   ...
+   resumo ok=295/295 decisoes_iguais=295/295 dif_max=... (seg ...) dif/tol_max=...% ciclos min=... med=... max=... (med ... us)
+   MARCO OK
+   ```
+
+   Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
+3. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` na serial. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O LED da placa (PC13) fica aceso depois da conferência.
+
+### Cabeçalhos do modelo
+
+Os dois vêm do repositório do Python e não se editam a mão:
+
+| Arquivo em `Core/Inc/` | Gerado por (em `diagnostico-acustico-motores`) |
+|---|---|
+| `lda_modelo.h` | `scripts/pipeline/06_export_lda_header.py` → `reports/modelo_final/lda_modelo.h` |
+| `lda_vetores_teste.h` | `scripts/pipeline/07_export_lda_test_vectors.py` → `reports/modelo_final/lda_vetores_teste.h` |
+
+Se o modelo final mudar, regenere os dois e copie os dois. O firmware recusa uma combinação de modelos diferentes: compara o `lda_bias` do `lda_modelo.h` com o `VT_LDA_BIAS` do outro e, se forem diferentes, manda um `ERRO` e pisca os dois LEDs. Com os 295 segmentos, os vetores ocupam cerca de 34 KB de flash (34.250 B no ELF); `--por-gravacao K` no gerador reduz.
+
+### Teste no PC
+
+A comparação com a referência e a formatação da serial compilam sem a HAL:
+
+```bash
+gcc -std=c11 -O2 -Wall -Wextra -Werror -Wdouble-promotion -DMARCO_HOST \
+    -ICore/Inc tests/host/test_marco_lda.c Core/Src/marco_lda.c -lm -o build/test_marco_lda
+./build/test_marco_lda
 ```
 
-O pico no bin 32 com magnitude 256,0 (= N/2) é o valor teórico esperado, então a linha confirma que a FFT está correta.
+No PC o gcc não funde multiplicação e soma; no Cortex-M4 funde (`vfma.f32`). Os dois ficam dentro da tolerância, mas os escores não são bit a bit iguais.
 
 ## Hardware
 
@@ -49,7 +82,9 @@ O diagrama de circuito está em [`hardware/frente1-circuito/`](hardware/frente1-
 
 ```
 frente1.ioc                  configuração do STM32CubeMX (pinos, clock, USART1)
-Core/                        código da aplicação (main.c e periféricos gerados pelo CubeMX)
+Core/                        código da aplicação (main.c e periféricos gerados pelo CubeMX;
+                             marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h)
+tests/host/                  teste no PC da parte do marco que não usa a HAL
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
