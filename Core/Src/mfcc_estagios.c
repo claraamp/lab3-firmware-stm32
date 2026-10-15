@@ -42,12 +42,16 @@ void mfcc_escala(const int16_t *pcm, float *x, size_t n)
     }
 }
 
-void mfcc_janela(const float x[MFCC_N_AMOSTRAS], float quadros[MFCC_N_QUADROS][MFCC_N_QUADRO])
+void mfcc_janela_quadro(const float x[MFCC_N_QUADRO], float quadro[MFCC_N_QUADRO])
 {
-    /* Os quadros ficam dentro do segmento: as 64 ultimas amostras nao entram. */
-    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
-        arm_mult_f32(&x[q * MFCC_PASSO], janela_hann, quadros[q], MFCC_N_QUADRO);
-    }
+    arm_mult_f32(x, janela_hann, quadro, MFCC_N_QUADRO);
+}
+
+void mfcc_quadro_pcm(const int16_t pcm[MFCC_N_QUADRO], float quadro[MFCC_N_QUADRO])
+{
+    /* as mesmas duas operacoes de mfcc_escala e mfcc_janela_quadro, sem buffer extra */
+    mfcc_escala(pcm, quadro, MFCC_N_QUADRO);
+    arm_mult_f32(quadro, janela_hann, quadro, MFCC_N_QUADRO);
 }
 
 void mfcc_espectro(const float quadro[MFCC_N_QUADRO], float potencia[MFCC_N_BINS])
@@ -65,23 +69,27 @@ void mfcc_espectro(const float quadro[MFCC_N_QUADRO], float potencia[MFCC_N_BINS
     arm_cmplx_mag_squared_f32(&saida[2], &potencia[1], MFCC_N_BINS - 2);
 }
 
-void mfcc_resumo(const float mfcc[][MFCC_N_COEFS], size_t n_quadros,
-                 float media[MFCC_N_COEFS], float desvio[MFCC_N_COEFS])
+void mfcc_resumo_iniciar(mfcc_resumo_t *r)
 {
-    float m2[MFCC_N_COEFS];
+    memset(r, 0, sizeof *r);
+}
+
+void mfcc_resumo_acumular(mfcc_resumo_t *r, const float coefs[MFCC_N_COEFS])
+{
+    r->n += 1u;
+    const float n = (float)r->n;
     for (int c = 0; c < MFCC_N_COEFS; ++c) {
-        media[c] = 0.0f;
-        m2[c] = 0.0f;
+        const float d = coefs[c] - r->media[c];
+        r->media[c] += d / n;
+        r->m2[c] += d * (coefs[c] - r->media[c]);
     }
-    for (size_t i = 0; i < n_quadros; ++i) {
-        const float n = (float)(i + 1u);
-        for (int c = 0; c < MFCC_N_COEFS; ++c) {
-            const float d = mfcc[i][c] - media[c];
-            media[c] += d / n;
-            m2[c] += d * (mfcc[i][c] - media[c]);
-        }
-    }
+}
+
+void mfcc_resumo_finalizar(const mfcc_resumo_t *r, float media[MFCC_N_COEFS],
+                           float desvio[MFCC_N_COEFS])
+{
     for (int c = 0; c < MFCC_N_COEFS; ++c) {
-        desvio[c] = sqrtf(m2[c] / (float)n_quadros);
+        media[c] = r->media[c];
+        desvio[c] = r->n ? sqrtf(r->m2[c] / (float)r->n) : 0.0f;
     }
 }

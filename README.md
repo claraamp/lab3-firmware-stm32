@@ -197,15 +197,17 @@ mel       rel_quadro          -          -           -    5e-06       -  -      
 - **Isolado:** cada estágio recebe a referência do anterior, em float32. Confere um bloco mesmo com a cadeia incompleta.
 - **Encadeado:** a cadeia em C desde o `int16`, como na placa, até o primeiro estágio não portado.
 
-O programa termina com `HARNESS OK`, código 0, se todos os estágios portados ficaram dentro da tolerância. Termina com `HARNESS FALHOU`, código 1, se algum passou dela. Termina com código 2 se não conseguiu usar as referências: faltam o `tolerancias.txt` ou o `modelo.txt`, as referências são de outro modelo, um arquivo não tem a forma esperada do estágio (por exemplo, a janela tem que ser 98 × 320) ou uma referência tem zero onde a métrica do A4 não se aplica (o `dsp.erro_estagio` do Python recusa o mesmo caso).
+O programa termina com `HARNESS OK`, código 0, se todos os estágios portados ficaram dentro da tolerância. Termina com `HARNESS FALHOU`, código 1, se algum passou dela. Termina com código 2 se não conseguiu usar as referências: faltam o `tolerancias.txt` ou o `modelo.txt`, o `tolerancias.txt` tem uma métrica desconhecida (só valem `rel_quadro`, `abs` e `rel`), as referências são de outro modelo, um arquivo não tem a forma esperada do estágio (por exemplo, a janela tem que ser 98 × 320) ou uma referência tem zero onde a métrica do A4 não se aplica (o `dsp.erro_estagio` do Python recusa o mesmo caso).
 
 Hoje estão portados a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10.
 
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia usa cerca de 8 KB: 5,4 KB fixos do `mfcc_estagios.c` (a janela e os buffers da FFT) e 2,5 KB de pilha no laço (medidos com `-fstack-usage` no Cortex-M4). O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+
 ### Portar um estágio novo (Mel, log e DCT: blocos 3 a 5)
 
-1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`.
+1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro (por exemplo, `mfcc_mel(const float potencia[257], float mel[20])`), sem buffers do segmento inteiro.
 2. No `harness.c`, marque o estágio em `PORTADO[]`.
-3. No `harness.c`, chame a função em `rodar_isolado()`, com a referência do estágio anterior, e em `rodar_encadeado()`, com a saída em C do anterior.
+3. No `harness.c`, chame a função no laço de quadros de `rodar_isolado()`, com a referência do estágio anterior, e no laço de `rodar_encadeado()`, com a saída em C do anterior.
 4. Recompile e rode. O estágio passa a ter linha própria, nos dois modos, contra a tolerância do A4.
 
 Se o estágio falhar, a coluna "Onde o porte costuma divergir" do contrato lista as causas mais comuns: Slaney em vez de HTK, `log10`, DCT sem a escala ortonormal e outras.

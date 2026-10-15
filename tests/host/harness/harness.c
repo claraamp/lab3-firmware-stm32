@@ -150,6 +150,18 @@ static int ler_tolerancias(const char *refs)
             fprintf(stderr, "aviso: estagio desconhecido em tolerancias.txt: %s\n", nome);
             continue;
         }
+        if (strcmp(metrica, "rel_quadro") != 0 && strcmp(metrica, "abs") != 0
+                && strcmp(metrica, "rel") != 0) {
+            fprintf(stderr, "erro: tolerancias.txt: metrica desconhecida \"%s\" no estagio %s "
+                    "(use rel_quadro, abs ou rel)\n", metrica, nome);
+            fclose(f);
+            return -1;
+        }
+        if (!(iso > 0.0) || !(enc > 0.0)) {
+            fprintf(stderr, "erro: tolerancias.txt: tolerancia nao positiva no estagio %s\n", nome);
+            fclose(f);
+            return -1;
+        }
         snprintf(tolerancia[e].metrica, sizeof tolerancia[e].metrica, "%s", metrica);
         tolerancia[e].tol[ISOLADO] = iso;
         tolerancia[e].tol[ENCADEADO] = enc;
@@ -275,7 +287,7 @@ static double metrica_a4(const char *metrica, const float *c, const matriz_t *r)
             v = dif_max / escala;
         } else if (strcmp(metrica, "abs") == 0) {
             v = dif_max;
-        } else {
+        } else {   /* "rel": o ler_tolerancias recusa outros nomes */
             if (tem_zero) {
                 return -1.0;
             }
@@ -321,11 +333,13 @@ static void comparar(int modo, int e, const float *c, const segmento_t *s)
 /* ------------------------------------------------------------------------- */
 /* Execucao dos estagios portados                                             */
 /* ------------------------------------------------------------------------- */
+/* Os estagios em C trabalham um quadro por vez, como na placa; o harness junta os
+ * quadros nestes buffers (no PC ha memoria de sobra) para comparar com a referencia
+ * do segmento inteiro. */
 static float x_c[MFCC_N_AMOSTRAS];
 static float quadros_c[MFCC_N_QUADROS][MFCC_N_QUADRO];
 static float espectro_c[MFCC_N_QUADROS][MFCC_N_BINS];
 static float entrada_f[MFCC_N_QUADROS * MFCC_N_QUADRO];   /* referencia convertida para float32 */
-static float mfcc_f[MFCC_N_QUADROS][MFCC_N_COEFS];
 
 static void para_float(const matriz_t *m, float *out)
 {
@@ -340,12 +354,14 @@ static void rodar_isolado(const segmento_t *s)
     mfcc_escala(s->entrada, x_c, MFCC_N_AMOSTRAS);
     comparar(ISOLADO, ESCALA, x_c, s);
 
-    /* janela: recebe a escala de referencia */
+    /* janela: cada quadro recebe o trecho da escala de referencia */
     para_float(&s->m[ESCALA], entrada_f);
-    mfcc_janela(entrada_f, quadros_c);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_janela_quadro(&entrada_f[q * MFCC_PASSO], quadros_c[q]);
+    }
     comparar(ISOLADO, JANELA, &quadros_c[0][0], s);
 
-    /* espectro: recebe os quadros janelados de referencia */
+    /* espectro: cada quadro recebe o quadro janelado de referencia */
     para_float(&s->m[JANELA], entrada_f);
     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
         mfcc_espectro(&entrada_f[q * MFCC_N_QUADRO], espectro_c[q]);
@@ -354,10 +370,17 @@ static void rodar_isolado(const segmento_t *s)
 
     /* mel, logmel e mfcc: ainda nao portados (Mel e o bloco 3; log e DCT, os blocos 4 e 5) */
 
-    /* media e desvio: recebem o MFCC de referencia */
-    float media[MFCC_N_COEFS], desvio[MFCC_N_COEFS];
-    para_float(&s->m[MFCC], &mfcc_f[0][0]);
-    mfcc_resumo((const float (*)[MFCC_N_COEFS])mfcc_f, MFCC_N_QUADROS, media, desvio);
+    /* media e desvio: acumulam, quadro a quadro, o MFCC de referencia */
+    float media[MFCC_N_COEFS], desvio[MFCC_N_COEFS], coefs[MFCC_N_COEFS];
+    mfcc_resumo_t r;
+    mfcc_resumo_iniciar(&r);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        for (int c = 0; c < MFCC_N_COEFS; ++c) {
+            coefs[c] = (float)s->m[MFCC].d[q * MFCC_N_COEFS + c];
+        }
+        mfcc_resumo_acumular(&r, coefs);
+    }
+    mfcc_resumo_finalizar(&r, media, desvio);
     comparar(ISOLADO, MEDIA, media, s);
     comparar(ISOLADO, DESVIO, desvio, s);
 
@@ -373,19 +396,23 @@ static void rodar_isolado(const segmento_t *s)
 #endif
 }
 
-/* Ultimo estagio alcancado na cadeia encadeada (o anterior ao primeiro nao portado). */
+/* A cadeia como na placa: um quadro por vez, desde as amostras int16. Devolve o
+ * ultimo estagio alcancado (o anterior ao primeiro nao portado). */
 static int rodar_encadeado(const segmento_t *s)
 {
+    /* a escala do segmento inteiro so existe aqui, para ser comparada; na placa ela
+     * acontece dentro de mfcc_quadro_pcm, quadro a quadro */
     mfcc_escala(s->entrada, x_c, MFCC_N_AMOSTRAS);
     comparar(ENCADEADO, ESCALA, x_c, s);
-    mfcc_janela(x_c, quadros_c);
-    comparar(ENCADEADO, JANELA, &quadros_c[0][0], s);
     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_quadro_pcm(&s->entrada[q * MFCC_PASSO], quadros_c[q]);
         mfcc_espectro(quadros_c[q], espectro_c[q]);
+        /* Quando o Mel, o log e a DCT forem portados, o laco continua aqui:
+         * mel <- espectro_c[q], logmel <- mel, coefs <- logmel, e
+         * mfcc_resumo_acumular(&r, coefs); depois do laco, finalizar e o escore. */
     }
+    comparar(ENCADEADO, JANELA, &quadros_c[0][0], s);
     comparar(ENCADEADO, ESPECTRO, &espectro_c[0][0], s);
-    /* Quando o Mel, o log e a DCT forem portados, a cadeia continua aqui:
-     * mel <- espectro_c, logmel <- mel, mfcc <- logmel, resumo <- mfcc, escore <- resumo. */
     return ESPECTRO;
 }
 
