@@ -30,6 +30,29 @@ static const uint16_t mel_bordas[MFCC_N_MEL + 2] = {
 static float mel_pesos[MFCC_N_PESOS_MEL];
 static uint16_t mel_inicio[MFCC_N_MEL];
 
+/* Matriz da DCT-II ortonormal, 13 x 20 (1.040 B), calculada no init:
+ * dct_matriz[k][n] = s(k) cos(pi k (2n + 1) / 40), s(0) = sqrt(1/20), s(k>0) = sqrt(2/20). */
+static float dct_matriz[MFCC_N_COEFS][MFCC_N_MEL];
+
+/* cos(pi m / (2 MFCC_N_MEL)) para m inteiro, com a reducao feita em inteiros (periodo
+ * 4N = 80, simetrias em 2N = 40 e N = 20), para o cosf so ver angulos de 0 a pi/2.
+ * Sem a reducao, o angulo chega a 36,7 rad e o arredondamento dele em float32 erra
+ * o coeficiente em ate 6e-7; com ela, o erro fica em ~2 ulp (3e-8). */
+static float cos_pi_m_2n(int m)
+{
+    const int quatro_n = 4 * MFCC_N_MEL, dois_n = 2 * MFCC_N_MEL;
+    m %= quatro_n;
+    if (m > dois_n) {
+        m = quatro_n - m;            /* cos(2 pi - a) = cos(a) */
+    }
+    float sinal = 1.0f;
+    if (m > MFCC_N_MEL) {
+        m = dois_n - m;              /* cos(pi - a) = -cos(a) */
+        sinal = -1.0f;
+    }
+    return sinal * cosf(3.14159265358979323846f * (float)m / (float)dois_n);
+}
+
 int mfcc_estagios_init(void)
 {
     /* w[n] = 0,5 - 0,5 cos(2 pi n / (N - 1)), simetrica: calcula a metade e espelha,
@@ -78,6 +101,14 @@ int mfcc_estagios_init(void)
     }
     if (pos != MFCC_N_PESOS_MEL) {
         return -2;
+    }
+
+    /* DCT-II ortonormal (scipy.fft.dct(type=2, norm="ortho")), so as 13 primeiras linhas */
+    const float s0 = sqrtf(1.0f / (float)MFCC_N_MEL), s1 = sqrtf(2.0f / (float)MFCC_N_MEL);
+    for (int k = 0; k < MFCC_N_COEFS; ++k) {
+        for (int n = 0; n < MFCC_N_MEL; ++n) {
+            dct_matriz[k][n] = (k == 0 ? s0 : s1) * cos_pi_m_2n(k * (2 * n + 1));
+        }
     }
     return arm_rfft_fast_init_f32(&rfft, MFCC_N_FFT) == ARM_MATH_SUCCESS ? 0 : -1;
 }
@@ -133,6 +164,50 @@ void mfcc_mel(const float potencia[MFCC_N_BINS], float mel[MFCC_N_MEL])
 const uint16_t *mfcc_mel_bordas(void)
 {
     return mel_bordas;
+}
+
+void mfcc_log(const float mel[MFCC_N_MEL], float logmel[MFCC_N_MEL])
+{
+    /* o epsilon e somado, nao e piso: ln(0 + 1e-10) = -23,0259 num quadro em zero */
+    for (int m = 0; m < MFCC_N_MEL; ++m) {
+        logmel[m] = logf(mel[m] + MFCC_LOG_EPS);
+    }
+}
+
+void mfcc_dct(const float logmel[MFCC_N_MEL], float coefs[MFCC_N_COEFS])
+{
+    for (int k = 0; k < MFCC_N_COEFS; ++k) {
+        arm_dot_prod_f32(dct_matriz[k], logmel, MFCC_N_MEL, &coefs[k]);
+    }
+}
+
+const float *mfcc_dct_matriz(void)
+{
+    return &dct_matriz[0][0];
+}
+
+void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS])
+{
+    /* buffers de um quadro na pilha: ~2,5 KB */
+    float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
+    mfcc_quadro_pcm(pcm, quadro);
+    mfcc_espectro(quadro, potencia);
+    mfcc_mel(potencia, mel);
+    mfcc_log(mel, mel);              /* em lugar: cada saida depende so da entrada de mesmo indice */
+    mfcc_dct(mel, coefs);
+}
+
+void mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS])
+{
+    mfcc_resumo_t r;
+    float coefs[MFCC_N_COEFS];
+    mfcc_resumo_iniciar(&r);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_quadro_coefs(&pcm[q * MFCC_PASSO], coefs);
+        mfcc_resumo_acumular(&r, coefs);
+    }
+    /* ordem do JSON do modelo: as 13 medias e depois os 13 desvios */
+    mfcc_resumo_finalizar(&r, &caracteristicas[0], &caracteristicas[MFCC_N_COEFS]);
 }
 
 void mfcc_resumo_iniciar(mfcc_resumo_t *r)

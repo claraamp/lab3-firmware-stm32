@@ -8,28 +8,34 @@
  *
  * Tudo trabalha UM QUADRO POR VEZ, porque a F411 tem 128 KB de RAM: os 98 quadros
  * janelados de um segmento ocupariam 125 KB e o espectro de todos, mais 100 KB. Na
- * placa, o laco de um segmento de 1 s fica assim (cerca de 8 KB de RAM: 5,4 KB fixos
- * deste modulo, para a janela e a FFT, e 2,5 KB de pilha no laco):
+ * placa, o segmento de 1 s inteiro sai de uma chamada:
+ *
+ *     float x[2 * MFCC_N_COEFS];                 // 13 medias e 13 desvios
+ *     mfcc_segmento(pcm, x);                     // pcm: as 12.800 amostras int16
+ *     const float escore = lda_escore(x);        // lda_modelo.h
+ *
+ * que, por dentro, e este laco (cerca de 11 KB de RAM: ~8,4 KB fixos deste modulo,
+ * para a janela, a FFT, o Mel e a DCT, e ~2,7 KB de pilha por quadro):
  *
  *     mfcc_resumo_t r;
  *     mfcc_resumo_iniciar(&r);
  *     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
  *         float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
- *         float coefs[MFCC_N_COEFS];
- *         mfcc_quadro_pcm(&pcm[q * MFCC_PASSO], quadro);     // escala e janela
- *         mfcc_espectro(quadro, potencia);                    // FFT e potencia
- *         mfcc_mel(potencia, mel);                            // banco de Mel
- *         // log e DCT (blocos 4 e 5) -> coefs
- *         mfcc_resumo_acumular(&r, coefs);                    // Welford
+ *         float logmel[MFCC_N_MEL], coefs[MFCC_N_COEFS];
+ *         mfcc_quadro_pcm(&pcm[q * MFCC_PASSO], quadro);     // 1-4: escala e janela
+ *         mfcc_espectro(quadro, potencia);                    // 5-6: FFT e potencia
+ *         mfcc_mel(potencia, mel);                            // 7-9: banco de Mel
+ *         mfcc_log(mel, logmel);                              // 10: log
+ *         mfcc_dct(logmel, coefs);                            // 11: DCT
+ *         mfcc_resumo_acumular(&r, coefs);                    // 12: Welford
  *     }
  *     mfcc_resumo_finalizar(&r, media, desvio);               // as 26 caracteristicas
  *
  * O `pcm` pode ficar na flash (clipes gravados) ou num buffer circular de 320
  * amostras int16 (audio ao vivo): os quadros se sobrepoem em 192 amostras.
  *
- * Portados: escala, janela, espectro, banco de Mel (bloco 3) e resumo (media e
- * desvio por Welford, o bloco 6). Faltam o log (bloco 4) e a DCT (bloco 5): o
- * harness os mostra como "nao portado" ate existirem aqui.
+ * Todos os estagios estao portados: escala, janela, espectro, banco de Mel (bloco
+ * 3), log (bloco 4), DCT (bloco 5) e resumo (media e desvio por Welford, bloco 6).
  */
 
 #ifndef MFCC_ESTAGIOS_H
@@ -82,6 +88,22 @@ void mfcc_mel(const float potencia[MFCC_N_BINS], float mel[MFCC_N_MEL]);
  * bordas[m+2]), para o harness e o teste de tabela conferirem. */
 const uint16_t *mfcc_mel_bordas(void);
 
+/* 10. Log natural com o epsilon SOMADO (nao como piso): logmel = ln(mel + 1e-10).
+ * Pode ser chamado em lugar (logmel == mel). */
+#define MFCC_LOG_EPS 1e-10f
+void mfcc_log(const float mel[MFCC_N_MEL], float logmel[MFCC_N_MEL]);
+
+/* 11. DCT-II ortonormal (scipy.fft.dct(type=2, norm="ortho")), so os 13 primeiros
+ * coeficientes, c0 incluido. A CMSIS nao tem DCT-II (a arm_dct4 e DCT-IV): e uma
+ * matriz 13 x 20 calculada no init (1.040 B) e 13 produtos escalares. */
+void mfcc_dct(const float logmel[MFCC_N_MEL], float coefs[MFCC_N_COEFS]);
+
+/* A matriz da DCT, 13 x 20 por linha, para o teste de tabela conferir. */
+const float *mfcc_dct_matriz(void);
+
+/* 1-11 juntos para um quadro: as 320 amostras int16 -> os 13 coeficientes. */
+void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS]);
+
 /* 12. Media e desvio populacional de cada coeficiente, acumulados quadro a quadro
  * por Welford, sem guardar os quadros (docs/contrato_numerico.md, "Media e desvio
  * em float32"). */
@@ -96,5 +118,10 @@ void mfcc_resumo_acumular(mfcc_resumo_t *r, const float coefs[MFCC_N_COEFS]);
 /* Com r->n == 0, devolve zeros. */
 void mfcc_resumo_finalizar(const mfcc_resumo_t *r, float media[MFCC_N_COEFS],
                            float desvio[MFCC_N_COEFS]);
+
+/* A cadeia inteira de um segmento de 1 s: as 12.800 amostras int16 -> as 26
+ * caracteristicas, na ordem do modelo (13 medias e depois 13 desvios), prontas para
+ * o lda_escore(). Exige mfcc_estagios_init() antes. */
+void mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS]);
 
 #endif /* MFCC_ESTAGIOS_H */
