@@ -7,7 +7,7 @@ Mel nos segmentos de referencia e manda a saida de cada bloco em binario
 (protocolo no Core/Inc/blocos13.h). Este script:
 
 1. le a captura da serial (ou de um arquivo salvo antes, com --arquivo);
-2. confere modelo, entrada (SHA-256), tamanho e CRC-32 de cada bloco;
+2. confere modelo, entrada (CRC-32 do int16), tamanho e CRC-32 de cada bloco;
 3. grava cada estagio em <saida>/<segmento>/<estagio>.f32 e a captura bruta em
    <saida>/captura.bin;
 4. compara cada estagio com a referencia em float64 (reports/c_reference/estagios/
@@ -125,7 +125,8 @@ def ler_captura(leitor: Leitor, verboso: bool) -> dict:
         tipo = linha.split()[1] if len(linha.split()) > 1 else ""
         c = campos(linha)
         if tipo == "seg":
-            cap["segmentos"][c["nome"]] = {"entrada": c.get("entrada"), "dados": {}}
+            cap["segmentos"][c["nome"]] = {"entrada": c.get("entrada"), "entrada_crc32": c.get("entrada_crc32"),
+                                           "dados": {}}
             print(f"{c['nome']}: recebendo...", flush=True)
         elif tipo == "ciclos":
             cap["ciclos"][c["nome"]] = c
@@ -234,7 +235,7 @@ def main() -> int:
     ini = cap["inicio"]
     if ini.get("modelo") != modelo.get("id") or ini.get("json") != modelo.get("json_sha256_12"):
         print(f"erro: a placa usou o modelo {ini.get('modelo')} ({ini.get('json')}); as referencias sao do "
-              f"{modelo.get('id')} ({modelo.get('json_sha256_12')}). Rode o gerar_entrada.py e grave de novo.")
+              f"{modelo.get('id')} ({modelo.get('json_sha256_12')}). Copie o clipes_demo.h do mesmo modelo e grave de novo.")
         return 2
     manifest = json.loads((refs / "manifest.json").read_text())
     tol = ler_tolerancias(refs)
@@ -250,9 +251,15 @@ def main() -> int:
             print(f"erro: {nome} nao esta nas referencias")
             problemas += 1
             continue
-        sha = hashlib.sha256((pasta / "entrada.i16").read_bytes()).hexdigest()[:12]
-        if seg["entrada"] != sha:
-            print(f"erro: {nome}: a entrada da placa ({seg['entrada']}) nao e a das referencias ({sha})")
+        # a placa manda o CRC-32 da entrada int16; capturas anteriores a 17/10 (entrada
+        # vinda do blocos13_entrada.h) mandavam os 12 primeiros digitos do SHA-256
+        bruto_ref = (pasta / "entrada.i16").read_bytes()
+        if seg["entrada_crc32"] is not None:
+            esperado, veio = f"{zlib.crc32(bruto_ref) & 0xFFFFFFFF:08x}", seg["entrada_crc32"]
+        else:
+            esperado, veio = hashlib.sha256(bruto_ref).hexdigest()[:12], seg["entrada"]
+        if veio != esperado:
+            print(f"erro: {nome}: a entrada da placa ({veio}) nao e a das referencias ({esperado})")
             problemas += 1
             continue
         destino = args.saida / nome

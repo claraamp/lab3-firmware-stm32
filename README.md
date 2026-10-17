@@ -33,14 +33,17 @@ Ao ligar, a placa:
 
 ### Cabeçalhos do modelo
 
-Os dois vêm do repositório do Python e não se editam a mão:
+Os três vêm do repositório do Python e não se editam a mão:
 
 | Arquivo em `Core/Inc/` | Gerado por (em `diagnostico-acustico-motores`) |
 |---|---|
 | `lda_modelo.h` | `scripts/pipeline/06_export_lda_header.py` → `reports/modelo_final/lda_modelo.h` |
 | `lda_vetores_teste.h` | `scripts/pipeline/07_export_lda_test_vectors.py` → `reports/modelo_final/lda_vetores_teste.h` |
+| `clipes_demo.h` | `scripts/pipeline/09_export_clips.py` → `reports/c_reference/clipes_demo.h` (Frente 3C) |
 
-Se o modelo final mudar, regenere os dois e copie os dois. O firmware recusa uma combinação de modelos diferentes: compara o `lda_bias` do `lda_modelo.h` com o `VT_LDA_BIAS` do outro e, se forem diferentes, manda um `ERRO` e pisca os dois LEDs. Com os 295 segmentos, os vetores ocupam cerca de 34 KB de flash (34.250 B no ELF); `--por-gravacao K` no gerador reduz.
+O `clipes_demo.h` só declara os vetores; o `Core/Src/clipes_demo.c` é o único `.c` que os define (com `CLIPES_DEMO_DADOS`), para o áudio entrar na flash uma vez só. O que nenhum código usa sai no link (`--gc-sections`).
+
+Se o modelo final mudar, regenere e copie os três. O firmware recusa uma combinação de modelos diferentes: compara o `lda_bias` do `lda_modelo.h` com o `VT_LDA_BIAS` do outro e, se forem diferentes, manda um `ERRO` e pisca os dois LEDs. Com os 295 segmentos, os vetores ocupam cerca de 34 KB de flash (34.250 B no ELF); `--por-gravacao K` no gerador reduz.
 
 ### Teste no PC
 
@@ -86,8 +89,8 @@ frente1.ioc                  configuração do STM32CubeMX (pinos, clock, USART1
 Core/                        código da aplicação (main.c e periféricos gerados pelo CubeMX;
                              marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h;
                              mfcc_estagios.c/.h, os estágios da extração de características
-                             portados para C; blocos13.c/.h e blocos13_entrada.h, o teste
-                             dos blocos 1 a 3 na placa)
+                             portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
+                             placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C)
 tests/host/                  teste no PC da parte do marco que não usa a HAL
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         gerador da entrada, emulador e receptor do teste dos blocos 1 a 3
@@ -223,7 +226,7 @@ Se o estágio falhar, a coluna "Onde o porte costuma divergir" do contrato lista
 
 ## Blocos 1 a 3 na placa
 
-O `Core/Src/blocos13.c` roda na placa a janela (escala e Hann), o espectro de potência e o banco de Mel nos **mesmos 5 segmentos do harness**, gravados na flash pelo `Core/Inc/blocos13_entrada.h`. Para cada segmento, ele:
+O `Core/Src/blocos13.c` roda na placa a janela (escala e Hann), o espectro de potência e o banco de Mel no **primeiro segmento de cada clipe** do `clipes_demo.h`. São, bit a bit, os mesmos 5 segmentos das referências do harness (`normal_seg0029`, `bpfi_0.3mm_seg0088` e os outros), então o teste não precisa de cópia própria do áudio. Para cada segmento, ele:
 
 1. mede com o DWT os ciclos de cada bloco em cada um dos 98 quadros, os três blocos juntos num quadro e o segmento inteiro (uma passada sem a serial, descontando o custo de ler o contador);
 2. manda a saída de cada bloco pela serial em binário (float32, quadro a quadro), com o CRC-32 de cada bloco. O protocolo está no comentário do `Core/Inc/blocos13.h`.
@@ -256,20 +259,13 @@ O `emular_blocos13` (compilado com o harness) roda o mesmo `blocos13_rodar()` no
 python3 tests/host/blocos13/receber_blocos13.py --arquivo build/captura_pc.bin --saida build/blocos13_pc
 ```
 
-### Trocar os segmentos
+### Segmentos e entrada
 
-O `blocos13_entrada.h` é gerado das referências e não se edita a mão:
-
-```bash
-python3 tests/host/blocos13/gerar_entrada.py                                  # os 5 do segmentos.txt
-python3 tests/host/blocos13/gerar_entrada.py --segmentos normal_seg0029       # só um (25 KB de flash)
-```
-
-Se as referências do Python forem regeneradas com outro modelo, regenere o `.h` e grave de novo: o receptor recusa uma captura com outro modelo ou outra entrada.
+A placa manda o CRC-32 das 12.800 amostras `int16` de cada segmento (`entrada_crc32`), e o receptor confere com o `entrada.i16` da referência. Se os clipes e as referências forem regenerados de modelos ou segmentos diferentes, o receptor recusa a captura, em vez de comparar entradas diferentes. Capturas feitas antes de 17/10, quando a entrada vinha de uma cópia própria (`blocos13_entrada.h`, removido), mandavam o SHA-256 da entrada, e o receptor ainda as aceita.
 
 ### Custo
 
-Com o teste ligado, o firmware ocupa 196 KB de flash (37 %), dos quais 125 KB são os segmentos, e 28 KB de RAM (22 %), dos quais 7,8 KB guardam os ciclos de todos os quadros para o resumo. Com `-DBLOCOS13=OFF`, 61 KB de flash e 7,2 KB de RAM.
+Com o teste ligado, o firmware ocupa 324 KB de flash (62 %) e 28 KB de RAM (22 %). Da flash, 256 KB são os 5 clipes de 2 s (o teste usa o primeiro segundo de cada um, mas o vetor de cada clipe entra inteiro). Da RAM, 7,8 KB guardam os ciclos de todos os quadros para o resumo. O recorte a 51,2 kHz do `clipes_demo.h` (100 KB) só entra quando a decimação embarcada o usar. Com `-DBLOCOS13=OFF` e sem a integração dos clipes, nada do `clipes_demo.h` é usado e o firmware volta a 61 KB de flash e 7,2 KB de RAM.
 
 ## Medições
 

@@ -80,6 +80,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/marco_lda.c
     Core/Src/mfcc_estagios.c
+    # clipes de audio da Frente 3C (clipes_demo.h, gerado no repositorio do Python);
+    # o que nenhum .c usa sai no link pelo --gc-sections
+    Core/Src/clipes_demo.c
 )
 # Marco de 13/10 (LDA na placa) e estagios do MFCC: sempre otimizados, inclusive
 # no Debug, para o tempo medido pelo DWT ser o do firmware final, como o CMSIS-DSP
@@ -87,9 +90,10 @@ set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Teste dos blocos 1 a 3 na placa (janela, espectro e Mel; Core/Src/blocos13.c):
-# ao ligar, roda os 5 segmentos de referencia do blocos13_entrada.h, mede os ciclos
-# e manda a saida de cada bloco pela serial para o receber_blocos13.py. Ocupa 125 KB
-# de flash com os segmentos; -DBLOCOS13=OFF tira tudo.
+# ao ligar, roda o primeiro segmento de cada clipe do clipes_demo.h (os 5 das
+# referencias do harness), mede os ciclos e manda a saida de cada bloco pela serial
+# para o receber_blocos13.py. Le o audio dos clipes, sem copia propria; -DBLOCOS13=OFF
+# tira o teste.
 option(BLOCOS13 "Teste dos blocos 1 a 3 na placa ao ligar" ON)
 if(BLOCOS13)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/blocos13.c)

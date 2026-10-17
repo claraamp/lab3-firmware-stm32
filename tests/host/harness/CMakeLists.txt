@@ -76,6 +76,7 @@ add_executable(emular_blocos13
     ${RAIZ}/tests/host/blocos13/emular_blocos13.c
     ${RAIZ}/Core/Src/blocos13.c
     ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
 )
 target_compile_definitions(emular_blocos13 PRIVATE BLOCOS13_HOST)
 foreach(alvo test_mel_bordas emular_blocos13)
