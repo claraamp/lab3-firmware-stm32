@@ -26,6 +26,9 @@
 #include <stdio.h>
 #include "arm_math.h"
 #include "marco_lda.h"
+#ifdef FIRMWARE_BLOCOS13
+#include "blocos13.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -149,6 +152,13 @@ int main(void)
   int slen = snprintf(status_line, sizeof status_line, "fft_init status=%d\r\n", (int)fft_status);
   HAL_UART_Transmit(&huart1, (uint8_t *)status_line, slen, HAL_MAX_DELAY);
   fft_teste();
+
+#ifdef FIRMWARE_BLOCOS13
+  /* Blocos 1 a 3 (janela, espectro e Mel) nos segmentos de referencia: ciclos pelo
+   * DWT e a saida de cada bloco pela serial, para o receber_blocos13.py. Cerca de
+   * 100 s a 115200 baud; o marco vem depois. */
+  blocos13_executar();
+#endif
 
   /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */
   const int marco_ok = marco_lda_verificar();

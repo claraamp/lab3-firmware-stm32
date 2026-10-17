@@ -46,7 +46,7 @@ enum { ESCALA, JANELA, ESPECTRO, MEL, LOGMEL, MFCC, MEDIA, DESVIO, ESCORE, N_EST
 static const char *const NOME[N_ESTAGIOS] = {
     "escala", "janela", "espectro", "mel", "logmel", "mfcc", "media", "desvio", "escore"};
 /* 1 = ja portado em mfcc_estagios.c (ou, no escore, lda_modelo.h presente) */
-static const int PORTADO[N_ESTAGIOS] = {1, 1, 1, 0, 0, 0, 1, 1, TEM_LDA};
+static const int PORTADO[N_ESTAGIOS] = {1, 1, 1, 1, 0, 0, 1, 1, TEM_LDA};
 /* linhas x colunas de cada referencia: os buffers do harness tem esse tamanho fixo,
  * entao um indice.txt com outra forma e recusado antes de qualquer leitura */
 static const int FORMA[N_ESTAGIOS][2] = {
@@ -339,6 +339,7 @@ static void comparar(int modo, int e, const float *c, const segmento_t *s)
 static float x_c[MFCC_N_AMOSTRAS];
 static float quadros_c[MFCC_N_QUADROS][MFCC_N_QUADRO];
 static float espectro_c[MFCC_N_QUADROS][MFCC_N_BINS];
+static float mel_c[MFCC_N_QUADROS][MFCC_N_MEL];
 static float entrada_f[MFCC_N_QUADROS * MFCC_N_QUADRO];   /* referencia convertida para float32 */
 
 static void para_float(const matriz_t *m, float *out)
@@ -368,7 +369,14 @@ static void rodar_isolado(const segmento_t *s)
     }
     comparar(ISOLADO, ESPECTRO, &espectro_c[0][0], s);
 
-    /* mel, logmel e mfcc: ainda nao portados (Mel e o bloco 3; log e DCT, os blocos 4 e 5) */
+    /* mel: cada quadro recebe o espectro de referencia */
+    para_float(&s->m[ESPECTRO], entrada_f);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_mel(&entrada_f[q * MFCC_N_BINS], mel_c[q]);
+    }
+    comparar(ISOLADO, MEL, &mel_c[0][0], s);
+
+    /* logmel e mfcc: ainda nao portados (log e DCT, os blocos 4 e 5) */
 
     /* media e desvio: acumulam, quadro a quadro, o MFCC de referencia */
     float media[MFCC_N_COEFS], desvio[MFCC_N_COEFS], coefs[MFCC_N_COEFS];
@@ -407,13 +415,15 @@ static int rodar_encadeado(const segmento_t *s)
     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
         mfcc_quadro_pcm(&s->entrada[q * MFCC_PASSO], quadros_c[q]);
         mfcc_espectro(quadros_c[q], espectro_c[q]);
-        /* Quando o Mel, o log e a DCT forem portados, o laco continua aqui:
-         * mel <- espectro_c[q], logmel <- mel, coefs <- logmel, e
+        mfcc_mel(espectro_c[q], mel_c[q]);
+        /* Quando o log e a DCT forem portados, o laco continua aqui:
+         * logmel <- mel_c[q], coefs <- logmel, e
          * mfcc_resumo_acumular(&r, coefs); depois do laco, finalizar e o escore. */
     }
     comparar(ENCADEADO, JANELA, &quadros_c[0][0], s);
     comparar(ENCADEADO, ESPECTRO, &espectro_c[0][0], s);
-    return ESPECTRO;
+    comparar(ENCADEADO, MEL, &mel_c[0][0], s);
+    return MEL;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -510,8 +520,18 @@ int main(int argc, char **argv)
         }
     }
 
-    if (mfcc_estagios_init() != 0) {
-        fprintf(stderr, "erro: arm_rfft_fast_init_f32 falhou para N = %d\n", MFCC_N_FFT);
+    const int st_init = mfcc_estagios_init();
+    if (st_init != 0) {
+        if (st_init == -2) {
+            fprintf(stderr, "erro: mfcc_estagios_init: tabela de bordas do Mel inconsistente "
+                    "(filtro degenerado, fora do espectro ou total de pesos diferente de %d)\n",
+                    MFCC_N_PESOS_MEL);
+        } else if (st_init == -1) {
+            fprintf(stderr, "erro: mfcc_estagios_init: arm_rfft_fast_init_f32 falhou para N = %d\n",
+                    MFCC_N_FFT);
+        } else {
+            fprintf(stderr, "erro: mfcc_estagios_init devolveu %d\n", st_init);
+        }
         return 2;
     }
     printf("harness: referencias em %s\n", refs);
