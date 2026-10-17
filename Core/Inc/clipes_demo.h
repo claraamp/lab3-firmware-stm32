@@ -4,7 +4,7 @@
  * GERADO por scripts/pipeline/09_export_clips.py; nao editar a mao.
  * Modelo: reports/modelo_final/lda_final.json (exp239), SHA-256 do JSON ee0c3e088366
  * Escores: reports/modelo_final/escores_referencia.csv (SHA-256 2507e68b5489)
- * Particao: 772c8e1eb1; commit do gerador: ee919e6
+ * Particao: 772c8e1eb1; commit do gerador: eb20d58
  *
  * TODOS OS SEGMENTOS ESTAO NO TREINO DO MODELO FINAL: a demonstracao mede a
  * fidelidade do porte (a placa reproduz o Python), nao o desempenho do
@@ -24,19 +24,45 @@
  * Recorte a 51200 Hz: o segmento 29 (normal) com as
  * margens do decimador causal de fase 0 (arm_fir_decimate_f32): 75 amostras
  * antes e 73 depois; descartar as 37 primeiras saidas.
- * RECORTE_ESCORE_REF: MFCC da saida em float da decimacao;
- * RECORTE_ESCORE_REF_INT16: depois de requantizar com lrintf(y * 32767.0f) e
- * saturar (o escore do CSV).
+ * - REFERENCIA DA PLACA: RECORTE_ESCORE_REF_INT16. A entrada do MFCC e int16,
+ *   entao a placa requantiza a saida do decimador antes do MFCC
+ *   (docs/contrato_numerico.md, "Decimacao", item 4): lrintf(y * 32767.0f),
+ *   SATURADO em [-32768, 32767] antes do cast para int16 (sem saturar, um
+ *   pico acima de +-1 da a volta). RECORTE_ESCORE_REF_INT16 e o escore do
+ *   segmento requantizado como o 02 (round em float64; o escore do CSV).
+ * - RECORTE_ESCORE_REF: so diagnostico do caminho em float (MFCC da saida
+ *   da decimacao sem requantizar). As duas diferem em ~7e-6 relativo, e a
+ *   tolerancia do escore e 1e-5: a referencia errada quase esgota a margem.
  * - Em float64 (Python), o recorte decimado e requantizado da bit a bit o
  *   primeiro segmento do clipe 'normal'. Em float32 (placa) nao precisa:
  *   amostras perto de um empate (x,5) podem arredondar para o outro lado.
  *   Na emulacao da CMSIS em float32, amostras que diferem (de 1 LSB): 1 sem FMA, 2 com FMA;
  *   compare com folga de 1 LSB e o escore com tolerancia, nao bit a bit.
  * - RAM: o recorte inteiro em float ocuparia 205392 B (a F411 tem 128 KB).
- *   Decime em blocos, convertendo int16 -> float um bloco por vez: com
- *   blockSize = 512 (multiplo de RECORTE_FATOR), o estado da CMSIS tem
- *   RECORTE_N_TAPS + 511 floats (2632 B) e cada bloco da 128 saidas,
+ *   Decime em blocos, convertendo int16 -> float um bloco por vez. Com
+ *   RECORTE_BLOCO = 512 no init, o estado da CMSIS tem RECORTE_N_TAPS +
+ *   RECORTE_BLOCO - 1 floats (2632 B), e cada bloco da 128 saidas,
  *   um passo de quadro do MFCC.
+ * - RECORTE_N_AMOSTRAS = 100 x 512 + 148: depois dos blocos cheios vem uma
+ *   ultima chamada com RECORTE_ULTIMO_BLOCO = 148 amostras (multiplo de
+ *   RECORTE_FATOR; a chamada aceita um bloco menor que o do init). Um laco so
+ *   com blocos cheios perde as 37 ultimas saidas sem dar erro:
+ *
+ *     float x[RECORTE_BLOCO], y[RECORTE_BLOCO / RECORTE_FATOR];
+ *     float estado[RECORTE_N_TAPS + RECORTE_BLOCO - 1];
+ *     arm_fir_decimate_init_f32(&d, RECORTE_N_TAPS, RECORTE_FATOR,
+ *                               recorte_fir, estado, RECORTE_BLOCO);
+ *     for (int b = 0; b <= RECORTE_N_BLOCOS_CHEIOS; ++b) {
+ *         const int n = b < RECORTE_N_BLOCOS_CHEIOS ? RECORTE_BLOCO
+ *                                                   : RECORTE_ULTIMO_BLOCO;
+ *         for (int i = 0; i < n; ++i)
+ *             x[i] = (float)recorte_51200[b * RECORTE_BLOCO + i] / 32767.0f;
+ *         arm_fir_decimate_f32(&d, x, y, n);     // n / RECORTE_FATOR saidas
+ *         // saidas de indice global < RECORTE_DESCARTAR (todas no 1o bloco):
+ *         // descartar; as outras, requantizar (saturando) e seguir para o MFCC
+ *     }
+ *
+ *   No total, 12837 saidas - RECORTE_DESCARTAR = CLIPES_AMOSTRAS_POR_SEGMENTO.
  */
 
 #ifndef CLIPES_DEMO_H
@@ -50,6 +76,7 @@
 #define CLIPES_N_SEGMENTOS 10
 #define CLIPES_MODELO_ID "exp239"
 #define CLIPES_JSON_SHA256_12 "ee0c3e088366"
+#define CLIPES_CSV_SHA256_12 "2507e68b5489"   /* escores_referencia.csv */
 #define CLIPES_BYTES_AUDIO 358696
 
 typedef struct {
@@ -86,8 +113,11 @@ extern const clipe_segmento_t clipes_segmentos[CLIPES_N_SEGMENTOS];
 #define RECORTE_FASE 0
 #define RECORTE_DESCARTAR 37
 #define RECORTE_N_TAPS 147
-#define RECORTE_ESCORE_REF -1331.7583f
-#define RECORTE_ESCORE_REF_INT16 -1331.7677f
+#define RECORTE_BLOCO 512  /* amostras por chamada do decimador (blockSize do init) */
+#define RECORTE_N_BLOCOS_CHEIOS 100
+#define RECORTE_ULTIMO_BLOCO 148  /* a ultima chamada: nao esquecer */
+#define RECORTE_ESCORE_REF -1331.7583f  /* so diagnostico (saida em float) */
+#define RECORTE_ESCORE_REF_INT16 -1331.7677f  /* a referencia da placa */
 
 /* FIR da decimacao (dsp.taps_decimacao), em float32; simetrico bit a bit, entao
  * a ordem invertida que a CMSIS espera nao muda nada */
