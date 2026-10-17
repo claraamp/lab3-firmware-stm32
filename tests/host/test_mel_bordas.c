@@ -25,8 +25,9 @@ int main(void)
 {
     const double fs = 12800.0, fmin = 20.0, fmax = fs / 2.0;
     const int n_pontos = MFCC_N_MEL + 2;
-    if (mfcc_estagios_init() != 0) {
-        printf("FALHOU: mfcc_estagios_init\n");
+    const int st = mfcc_estagios_init();
+    if (st != 0) {
+        printf("FALHOU: mfcc_estagios_init devolveu %d (-1 = FFT, -2 = tabela do Mel)\n", st);
         return 1;
     }
     const uint16_t *b = mfcc_mel_bordas();

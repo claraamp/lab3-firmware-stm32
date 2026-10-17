@@ -520,8 +520,18 @@ int main(int argc, char **argv)
         }
     }
 
-    if (mfcc_estagios_init() != 0) {
-        fprintf(stderr, "erro: arm_rfft_fast_init_f32 falhou para N = %d\n", MFCC_N_FFT);
+    const int st_init = mfcc_estagios_init();
+    if (st_init != 0) {
+        if (st_init == -2) {
+            fprintf(stderr, "erro: mfcc_estagios_init: tabela de bordas do Mel inconsistente "
+                    "(filtro degenerado, fora do espectro ou total de pesos diferente de %d)\n",
+                    MFCC_N_PESOS_MEL);
+        } else if (st_init == -1) {
+            fprintf(stderr, "erro: mfcc_estagios_init: arm_rfft_fast_init_f32 falhou para N = %d\n",
+                    MFCC_N_FFT);
+        } else {
+            fprintf(stderr, "erro: mfcc_estagios_init devolveu %d\n", st_init);
+        }
         return 2;
     }
     printf("harness: referencias em %s\n", refs);

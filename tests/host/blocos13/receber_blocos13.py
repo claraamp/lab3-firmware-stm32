@@ -162,12 +162,27 @@ def ler_captura(leitor: Leitor, verboso: bool) -> dict:
 # --------------------------------------------------------------------------- #
 # Comparacao                                                                  #
 # --------------------------------------------------------------------------- #
+METRICAS = ("rel_quadro", "abs", "rel")
+
+
 def ler_tolerancias(refs: Path) -> dict:
+    """Como o harness: recusa metrica desconhecida e tolerancia nao positiva."""
     tol = {}
     for linha in (refs / "tolerancias.txt").read_text().splitlines():
         p = linha.split()
-        if len(p) == 4 and not linha.startswith("#"):
-            tol[p[0]] = (p[1], float(p[2]), float(p[3]))
+        if len(p) != 4 or linha.startswith("#"):
+            continue
+        estagio, metrica = p[0], p[1]
+        if metrica not in METRICAS:
+            raise ErroCaptura(f"tolerancias.txt: metrica desconhecida {metrica!r} no estagio {estagio} "
+                              f"(use {', '.join(METRICAS)})")
+        iso, enc = float(p[2]), float(p[3])
+        if not (iso > 0.0 and enc > 0.0):
+            raise ErroCaptura(f"tolerancias.txt: tolerancia nao positiva no estagio {estagio}")
+        tol[estagio] = (metrica, iso, enc)
+    faltam = [e for e in ESTAGIOS if e not in tol]
+    if faltam:
+        raise ErroCaptura(f"tolerancias.txt sem os estagios {', '.join(faltam)}")
     return tol
 
 
@@ -181,6 +196,8 @@ def metrica_a4(nome: str, c: np.ndarray, r: np.ndarray) -> float:
         return float((d.max(axis=1) / escala).max())
     if nome == "abs":
         return float(d.max())
+    if nome != "rel":
+        raise ErroCaptura(f"metrica desconhecida {nome!r} (use {', '.join(METRICAS)})")
     if np.any(r == 0.0):
         raise ErroCaptura("referencia com zero: rel nao se aplica")
     return float((d / np.abs(r)).max())
@@ -238,7 +255,11 @@ def main() -> int:
               f"{modelo.get('id')} ({modelo.get('json_sha256_12')}). Copie o clipes_demo.h do mesmo modelo e grave de novo.")
         return 2
     manifest = json.loads((refs / "manifest.json").read_text())
-    tol = ler_tolerancias(refs)
+    try:
+        tol = ler_tolerancias(refs)
+    except ErroCaptura as e:
+        print(f"erro: {e}")
+        return 2
 
     linhas_res, falhas, problemas = [], 0, 0
     print(f"\ncomparacao com as referencias (tolerancia encadeada do A4; modelo {modelo['id']})")

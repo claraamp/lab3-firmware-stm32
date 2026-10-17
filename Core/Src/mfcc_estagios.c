@@ -44,20 +44,40 @@ int mfcc_estagios_init(void)
     janela_hann[MFCC_N_QUADRO - 1] = 0.0f;
 
     /* Banco de Mel (dsp.mel_filterbank): subida (k - l)/(c - l) em [l, c) e descida
-     * (r - k)/(r - c) em [c, r); o bin r fica fora. */
+     * (r - k)/(r - c) em [c, r); o bin r fica fora.
+     * Nunca escreve alem do fim de mel_pesos: as bordas sao conferidas antes do
+     * laco (total de pesos), e o laco para com -2 se for escrever alem do fim (um
+     * erro no proprio laco, como incluir o bin r) ou se terminar antes dele. */
+    int total = 0;
+    for (int m = 0; m < MFCC_N_MEL; ++m) {
+        if (mel_bordas[m + 1] <= mel_bordas[m] || mel_bordas[m + 2] <= mel_bordas[m + 1]
+                || mel_bordas[m + 2] > MFCC_N_BINS - 1) {
+            return -2;   /* filtro degenerado ou fora do espectro */
+        }
+        total += mel_bordas[m + 2] - mel_bordas[m];
+    }
+    if (total != MFCC_N_PESOS_MEL) {
+        return -2;   /* tabela de bordas e MFCC_N_PESOS_MEL fora de sincronia */
+    }
     uint16_t pos = 0;
     for (int m = 0; m < MFCC_N_MEL; ++m) {
         const int l = mel_bordas[m], c = mel_bordas[m + 1], r = mel_bordas[m + 2];
         mel_inicio[m] = pos;
         for (int k = l; k < c; ++k) {
+            if (pos >= MFCC_N_PESOS_MEL) {
+                return -2;
+            }
             mel_pesos[pos++] = (float)(k - l) / (float)(c - l);
         }
         for (int k = c; k < r; ++k) {
+            if (pos >= MFCC_N_PESOS_MEL) {
+                return -2;
+            }
             mel_pesos[pos++] = (float)(r - k) / (float)(r - c);
         }
     }
     if (pos != MFCC_N_PESOS_MEL) {
-        return -2;   /* tabela de bordas e MFCC_N_PESOS_MEL fora de sincronia */
+        return -2;
     }
     return arm_rfft_fast_init_f32(&rfft, MFCC_N_FFT) == ARM_MATH_SUCCESS ? 0 : -1;
 }

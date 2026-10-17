@@ -48,7 +48,9 @@
 #define MFCC_N_COEFS    13
 
 /* Tabelas da janela e do banco de Mel e instancia da FFT. Devolve 0 se tudo
- * certo, -1 se a FFT nao inicializou e -2 se a tabela do Mel nao fecha. */
+ * certo, -1 se a FFT nao inicializou e -2 se a tabela de bordas do Mel e
+ * inconsistente (filtro degenerado, fora do espectro ou total de pesos diferente
+ * de MFCC_N_PESOS_MEL). Com -2, nada e escrito em mel_pesos. */
 int mfcc_estagios_init(void);
 
 /* Janela de Hann simetrica calculada no init (w[0] = w[319] = 0). */

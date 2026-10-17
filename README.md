@@ -17,7 +17,7 @@ Ao ligar, a placa:
    ```
 
    O pico no bin 32 com magnitude 256,0 (= N/2) é o valor teórico esperado.
-2. com a opção `BLOCOS13` do CMake (ligada por padrão), roda os **blocos 1 a 3** nos 5 segmentos de referência e manda a saída de cada bloco em binário, para o `receber_blocos13.py` (seção "Blocos 1 a 3 na placa"). Leva cerca de 100 s a 115200 baud;
+2. só se o firmware foi compilado com `-DBLOCOS13=ON` (desligada por padrão), roda os **blocos 1 a 3** nos 5 segmentos de referência e manda a saída de cada bloco em binário, para o `receber_blocos13.py` (seção "Blocos 1 a 3 na placa"). Leva cerca de 100 s a 115200 baud, e o marco e os LEDs só começam depois;
 3. **confere a LDA em todos os segmentos** do `lda_vetores_teste.h`: calcula o escore com o `lda_escore()` do `lda_modelo.h`, compara com o escore do `escores_referencia.csv` e manda uma linha por segmento, um resumo e `MARCO OK` ou `MARCO FALHOU`:
 
    ```
@@ -237,7 +237,14 @@ O `tests/host/blocos13/receber_blocos13.py` recebe tudo, confere modelo, entrada
 
 Precisa de Python 3 com `numpy` e `pyserial` (`pip install numpy pyserial`), e dos dois repositórios lado a lado, como no harness.
 
-1. Compile e grave o firmware normalmente (preset Debug). A opção `BLOCOS13` já vem ligada.
+1. Compile com o teste ligado e grave. A opção `BLOCOS13` vem **desligada** por padrão, porque o envio atrasa o boot em ~100 s, e numa demonstração a placa parece travada:
+
+   ```bash
+   cmake --preset Debug -DBLOCOS13=ON
+   cmake --build --preset Debug
+   ```
+
+   O valor fica guardado no cache do build (`build/Debug`). Depois do teste, volte com `cmake --preset Debug -DBLOCOS13=OFF` antes de gravar o firmware normal.
 2. **Feche o picocom** ou qualquer outro programa na porta: só um programa abre a serial por vez, e o binário aparece como lixo num terminal.
 3. Rode o receptor e, quando ele pedir, aperte o RESET da placa:
 
@@ -265,7 +272,17 @@ A placa manda o CRC-32 das 12.800 amostras `int16` de cada segmento (`entrada_cr
 
 ### Custo
 
-Com o teste ligado, o firmware ocupa 324 KB de flash (62 %) e 28 KB de RAM (22 %). Da flash, 256 KB são os 5 clipes de 2 s (o teste usa o primeiro segundo de cada um, mas o vetor de cada clipe entra inteiro). Da RAM, 7,8 KB guardam os ciclos de todos os quadros para o resumo. O recorte a 51,2 kHz do `clipes_demo.h` (100 KB) só entra quando a decimação embarcada o usar. Com `-DBLOCOS13=OFF` e sem a integração dos clipes, nada do `clipes_demo.h` é usado e o firmware volta a 61 KB de flash e 7,2 KB de RAM.
+Números do build Debug, em bytes, com KiB entre parênteses. O relatório do linker escreve "KB", mas usa KiB: a flash da F411 é "512 KB" = 524.288 B.
+
+| Build | Flash | RAM |
+|---|---|---|
+| `-DBLOCOS13=ON` | 322.840 B (315 KiB, 62 %) | 28.352 B (27,7 KiB, 22 %) |
+| `-DBLOCOS13=OFF` (padrão) | 60.812 B (59,4 KiB, 12 %) | 7.216 B (7,0 KiB, 5,5 %) |
+
+- **Com o teste ligado:** 256.000 B (250 KiB) da flash são os 5 clipes de 2 s. O teste usa o primeiro segundo de cada um, mas o vetor de cada clipe entra inteiro. Da RAM, 7.840 B guardam os ciclos de todos os quadros para o resumo.
+- **O recorte a 51,2 kHz** do `clipes_demo.h` (102.696 B) só entra quando a decimação embarcada o usar.
+- **Com o teste desligado** e sem a integração dos clipes, nada do `clipes_demo.h` é usado, e o `--gc-sections` tira tudo do link.
+- **A flash varia ~1,6 KB entre máquinas** com versões diferentes da toolchain: o mesmo commit deu 322.800, 322.840 e 324.416 B com o teste ligado.
 
 ## Medições
 
