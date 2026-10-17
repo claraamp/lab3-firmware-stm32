@@ -11,8 +11,10 @@
  * Dois modos:
  *   isolado    cada estagio recebe a referencia do estagio anterior (em float32):
  *              mede o erro do proprio estagio, mesmo com a cadeia incompleta;
- *   encadeado  a cadeia em C desde o int16, como na placa, ate o primeiro estagio
- *              que ainda nao foi portado.
+ *   encadeado  a cadeia em C desde o int16, como na placa, ate o escore (ou ate o
+ *              primeiro estagio que ainda nao foi portado). Confere tambem que o
+ *              mfcc_segmento(), a chamada unica que a placa usa, da bit a bit as
+ *              caracteristicas do laco estagio a estagio.
  *
  * Uso:  harness [--refs PASTA] [--modo isolado|encadeado|ambos] [-v]
  * Saida: 0 se todos os estagios portados ficam dentro da tolerancia; 1 se algum
@@ -35,6 +37,11 @@
 #ifndef TEM_LDA
 #define TEM_LDA 0
 #endif
+#if TEM_LDA
+/* o vetor do mfcc_segmento() e o do lda_escore() tem que ter o mesmo tamanho */
+_Static_assert(LDA_N_FEATURES == 2 * MFCC_N_COEFS,
+               "lda_modelo.h espera outro numero de caracteristicas que o mfcc_estagios.h");
+#endif
 
 #define REFS_PADRAO "../diagnostico-acustico-motores/reports/c_reference/estagios"
 #define MAX_CAMINHO 1024
@@ -46,7 +53,7 @@ enum { ESCALA, JANELA, ESPECTRO, MEL, LOGMEL, MFCC, MEDIA, DESVIO, ESCORE, N_EST
 static const char *const NOME[N_ESTAGIOS] = {
     "escala", "janela", "espectro", "mel", "logmel", "mfcc", "media", "desvio", "escore"};
 /* 1 = ja portado em mfcc_estagios.c (ou, no escore, lda_modelo.h presente) */
-static const int PORTADO[N_ESTAGIOS] = {1, 1, 1, 1, 0, 0, 1, 1, TEM_LDA};
+static const int PORTADO[N_ESTAGIOS] = {1, 1, 1, 1, 1, 1, 1, 1, TEM_LDA};
 /* linhas x colunas de cada referencia: os buffers do harness tem esse tamanho fixo,
  * entao um indice.txt com outra forma e recusado antes de qualquer leitura */
 static const int FORMA[N_ESTAGIOS][2] = {
@@ -340,6 +347,9 @@ static float x_c[MFCC_N_AMOSTRAS];
 static float quadros_c[MFCC_N_QUADROS][MFCC_N_QUADRO];
 static float espectro_c[MFCC_N_QUADROS][MFCC_N_BINS];
 static float mel_c[MFCC_N_QUADROS][MFCC_N_MEL];
+static float logmel_c[MFCC_N_QUADROS][MFCC_N_MEL];
+static float mfcc_c[MFCC_N_QUADROS][MFCC_N_COEFS];
+static int segmento_difere;   /* mfcc_segmento() diferente do laco estagio a estagio */
 static float entrada_f[MFCC_N_QUADROS * MFCC_N_QUADRO];   /* referencia convertida para float32 */
 
 static void para_float(const matriz_t *m, float *out)
@@ -376,7 +386,19 @@ static void rodar_isolado(const segmento_t *s)
     }
     comparar(ISOLADO, MEL, &mel_c[0][0], s);
 
-    /* logmel e mfcc: ainda nao portados (log e DCT, os blocos 4 e 5) */
+    /* logmel: cada quadro recebe o Mel de referencia */
+    para_float(&s->m[MEL], entrada_f);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_log(&entrada_f[q * MFCC_N_MEL], logmel_c[q]);
+    }
+    comparar(ISOLADO, LOGMEL, &logmel_c[0][0], s);
+
+    /* mfcc: cada quadro recebe o log-Mel de referencia */
+    para_float(&s->m[LOGMEL], entrada_f);
+    for (int q = 0; q < MFCC_N_QUADROS; ++q) {
+        mfcc_dct(&entrada_f[q * MFCC_N_MEL], mfcc_c[q]);
+    }
+    comparar(ISOLADO, MFCC, &mfcc_c[0][0], s);
 
     /* media e desvio: acumulam, quadro a quadro, o MFCC de referencia */
     float media[MFCC_N_COEFS], desvio[MFCC_N_COEFS], coefs[MFCC_N_COEFS];
@@ -412,18 +434,42 @@ static int rodar_encadeado(const segmento_t *s)
      * acontece dentro de mfcc_quadro_pcm, quadro a quadro */
     mfcc_escala(s->entrada, x_c, MFCC_N_AMOSTRAS);
     comparar(ENCADEADO, ESCALA, x_c, s);
+    mfcc_resumo_t r;
+    mfcc_resumo_iniciar(&r);
     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
         mfcc_quadro_pcm(&s->entrada[q * MFCC_PASSO], quadros_c[q]);
         mfcc_espectro(quadros_c[q], espectro_c[q]);
         mfcc_mel(espectro_c[q], mel_c[q]);
-        /* Quando o log e a DCT forem portados, o laco continua aqui:
-         * logmel <- mel_c[q], coefs <- logmel, e
-         * mfcc_resumo_acumular(&r, coefs); depois do laco, finalizar e o escore. */
+        mfcc_log(mel_c[q], logmel_c[q]);
+        mfcc_dct(logmel_c[q], mfcc_c[q]);
+        mfcc_resumo_acumular(&r, mfcc_c[q]);
     }
     comparar(ENCADEADO, JANELA, &quadros_c[0][0], s);
     comparar(ENCADEADO, ESPECTRO, &espectro_c[0][0], s);
     comparar(ENCADEADO, MEL, &mel_c[0][0], s);
-    return MEL;
+    comparar(ENCADEADO, LOGMEL, &logmel_c[0][0], s);
+    comparar(ENCADEADO, MFCC, &mfcc_c[0][0], s);
+
+    /* as 26 caracteristicas na ordem do modelo: 13 medias e 13 desvios */
+    float x[2 * MFCC_N_COEFS];
+    mfcc_resumo_finalizar(&r, &x[0], &x[MFCC_N_COEFS]);
+    comparar(ENCADEADO, MEDIA, &x[0], s);
+    comparar(ENCADEADO, DESVIO, &x[MFCC_N_COEFS], s);
+
+    /* a chamada unica da placa tem que dar exatamente o mesmo que o laco acima */
+    float x_seg[2 * MFCC_N_COEFS];
+    if (mfcc_segmento(s->entrada, x_seg) != 0 || memcmp(x, x_seg, sizeof x) != 0) {
+        fprintf(stderr, "erro: %s: mfcc_segmento() difere do laco estagio a estagio\n", s->pasta);
+        segmento_difere = 1;
+    }
+
+#if TEM_LDA
+    const float escore = lda_escore(x);
+    comparar(ENCADEADO, ESCORE, &escore, s);
+    return ESCORE;
+#else
+    return DESVIO;
+#endif
 }
 
 /* ------------------------------------------------------------------------- */
@@ -579,6 +625,12 @@ int main(int argc, char **argv)
     if (referencia_invalida) {
         printf("\nHARNESS: referencias invalidas para a metrica do A4 (ver os erros acima)\n");
         return 2;
+    }
+    if (segmento_difere) {
+        printf("\nmfcc_segmento(): DIFERE do laco estagio a estagio (ver os erros acima)\n");
+        ++falhas;
+    } else if (modos[ENCADEADO]) {
+        printf("\nmfcc_segmento(): igual, bit a bit, ao laco estagio a estagio nos %d segmentos\n", n_seg);
     }
     printf("\n%s\n", falhas ? "HARNESS FALHOU" : "HARNESS OK (estagios portados dentro da tolerancia)");
     return falhas ? 1 : 0;

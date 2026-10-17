@@ -65,11 +65,16 @@ elseif(MSVC)
     target_compile_definitions(harness PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
-# Teste das bordas do banco de Mel (tests/host/test_mel_bordas.c) e emulador do
-# teste dos blocos 1 a 3 na placa (tests/host/blocos13/): usam os mesmos estagios
-# e a mesma CMSIS-DSP generica do harness.
+# Testes das tabelas (bordas do Mel em tests/host/test_mel_bordas.c; matriz da DCT,
+# log e Welford em tests/host/test_log_dct.c) e emulador do teste dos blocos 1 a 3
+# na placa (tests/host/blocos13/): usam os mesmos estagios e a mesma CMSIS-DSP
+# generica do harness.
 add_executable(test_mel_bordas
     ${RAIZ}/tests/host/test_mel_bordas.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+)
+add_executable(test_log_dct
+    ${RAIZ}/tests/host/test_log_dct.c
     ${RAIZ}/Core/Src/mfcc_estagios.c
 )
 add_executable(emular_blocos13
@@ -79,7 +84,7 @@ add_executable(emular_blocos13
     ${RAIZ}/Core/Src/clipes_demo.c
 )
 target_compile_definitions(emular_blocos13 PRIVATE BLOCOS13_HOST)
-foreach(alvo test_mel_bordas emular_blocos13)
+foreach(alvo test_mel_bordas test_log_dct emular_blocos13)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

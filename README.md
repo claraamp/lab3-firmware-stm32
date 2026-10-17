@@ -6,7 +6,7 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC começou em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"). Os blocos 1 a 3 (janela, espectro e Mel) já rodam na placa, com a saída conferida contra o Python pela serial (seção "Blocos 1 a 3 na placa").
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC está em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"). **A cadeia inteira (blocos 1 a 6) passa no harness**, do `int16` ao escore da LDA, e a placa calcula as 26 características de um segmento com uma chamada, `mfcc_segmento()`. Os blocos 1 a 3 (janela, espectro e Mel) já rodam na placa, com a saída conferida contra o Python pela serial (seção "Blocos 1 a 3 na placa"); os blocos 4 a 6 (log, DCT, média e desvio) ainda vão para a placa.
 
 Ao ligar, a placa:
 
@@ -91,9 +91,10 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              mfcc_estagios.c/.h, os estágios da extração de características
                              portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
                              placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C)
-tests/host/                  teste no PC da parte do marco que não usa a HAL
+tests/host/                  teste no PC da parte do marco que não usa a HAL e testes das tabelas
+                             (test_mel_bordas.c, test_log_dct.c)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
-tests/host/blocos13/         gerador da entrada, emulador e receptor do teste dos blocos 1 a 3
+tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -196,28 +197,64 @@ estagio   metrica      erro_abs   erro_rel  metrica_A4      tol   razao  pior se
 escala    rel_quadro  2.955e-08  4.332e-08   4.332e-08    1e-06    4.3%  normal_seg0029           OK
 janela    rel_quadro  1.036e-07  1.246e-07   1.654e-07    5e-06    3.3%  bpfi_1.0mm_seg0147       OK
 espectro  rel_quadro  2.739e-04  3.035e-07   3.745e-07    5e-06    7.5%  bpfo_0.3mm_seg0206       OK
-mel       rel_quadro          -          -           -    5e-06       -  -                        nao portado
+mel       rel_quadro  7.942e-04  2.051e-07   3.110e-07    5e-06    6.2%  bpfi_1.0mm_seg0147       OK
+logmel    abs         4.266e-07  5.164e-08   4.266e-07    1e-05    4.3%  bpfi_1.0mm_seg0147       OK
+mfcc      abs         2.372e-06  2.449e-07   2.372e-06    5e-05    4.7%  bpfo_1.0mm_seg0265       OK
 ...
 ```
 
 - **Isolado:** cada estágio recebe a referência do anterior, em float32. Confere um bloco mesmo com a cadeia incompleta.
-- **Encadeado:** a cadeia em C desde o `int16`, como na placa, até o primeiro estágio não portado.
+- **Encadeado:** a cadeia em C desde o `int16`, como na placa, até o escore. No fim, o harness também confere que o `mfcc_segmento()`, a chamada única que a placa usa, dá bit a bit as mesmas 26 características do laço estágio a estágio.
 
 O programa termina com `HARNESS OK`, código 0, se todos os estágios portados ficaram dentro da tolerância. Termina com `HARNESS FALHOU`, código 1, se algum passou dela. Termina com código 2 se não conseguiu usar as referências: faltam o `tolerancias.txt` ou o `modelo.txt`, o `tolerancias.txt` tem uma métrica desconhecida (só valem `rel_quadro`, `abs` e `rel`), as referências são de outro modelo, um arquivo não tem a forma esperada do estágio (por exemplo, a janela tem que ser 98 × 320) ou uma referência tem zero onde a métrica do A4 não se aplica (o `dsp.erro_estagio` do Python recusa o mesmo caso).
 
-Hoje estão portados a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist), o banco de Mel (bloco 3, esparso) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10.
+Todos os estágios estão portados: a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist), o banco de Mel (bloco 3, esparso), o log (bloco 4), a DCT (bloco 5) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10. Nos 5 segmentos, o pior estágio usa 7,8 % da tolerância, e o escore encadeado, do `int16` à LDA, erra 3,4 × 10⁻⁷ relativo (3,4 % da tolerância de 10⁻⁵):
 
-**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia usa cerca de 10 KB: 7,3 KB fixos do `mfcc_estagios.c` (a janela, os buffers da FFT e os 479 pesos do Mel) e 2,5 KB de pilha no laço (medidos com `-fstack-usage` no Cortex-M4). O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+| Estágio | Isolado | Encadeado | Tolerância (isolado / encadeado) |
+|---|---:|---:|---:|
+| logmel (abs) | 4,3 × 10⁻⁷ | 5,9 × 10⁻⁶ | 1 × 10⁻⁵ / 2 × 10⁻⁴ |
+| mfcc (abs) | 2,4 × 10⁻⁶ | 4,0 × 10⁻⁶ | 5 × 10⁻⁵ / 1 × 10⁻⁴ |
+| media (abs) | 2,1 × 10⁻⁶ | 1,9 × 10⁻⁶ | 1 × 10⁻⁴ |
+| desvio (rel) | 3,0 × 10⁻⁷ | 3,5 × 10⁻⁷ | 5 × 10⁻⁵ |
+| escore (rel) | 2,3 × 10⁻⁷ | 3,4 × 10⁻⁷ | 5 × 10⁻⁶ / 1 × 10⁻⁵ |
+
+**Log (bloco 4).** `mfcc_log(mel, logmel)`: `logf(mel + 1e-10f)`, com o épsilon **somado**, não como piso, como no contrato. Usa o `logf` da biblioteca C, e não a `arm_vlog_f32` da CMSIS, que é uma aproximação polinomial. Pode ser chamado em lugar.
+
+**DCT (bloco 5).** A CMSIS não tem DCT-II (a `arm_dct4_f32` é DCT-IV). `mfcc_dct(logmel, coefs)` multiplica pela matriz 13 × 20 da DCT-II ortonormal, calculada no `mfcc_estagios_init()` (1.040 B de RAM), com 13 `arm_dot_prod_f32`. O ângulo `π·k·(2n + 1)/40` é reduzido em inteiros (período 80, simetrias em 40 e 20) antes do `cosf`. Sem a redução, o ângulo chega a 36,7 rad e o arredondamento dele em float32 erra o coeficiente em até 6 × 10⁻⁷. No harness, o erro do escore encadeado sobe de 3,4 % para 15 % da tolerância.
+
+**Média e desvio (bloco 6).** Welford, quadro a quadro, já estava portado. A escolha está no contrato ("Média e desvio em float32", `exp242`): a soma dos quadrados erra o desvio cerca de 100 vezes mais e passaria da tolerância do A4.
+
+**O harness pega os erros clássicos destes blocos.** Testado com o código estragado de propósito: `log10f` no lugar do `logf`, a DCT sem a escala ortonormal, a DCT sem o c0 e o desvio amostral (`ddof = 1`) reprovam com erro de 100 a 10⁷ vezes a tolerância. O épsilon como piso (`max(mel, 1e-10)`) passaria, porque nenhum quadro das referências tem Mel tão pequeno; quem o pega é o `test_log_dct`.
+
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia inteira usa cerca de 11 KB de RAM, **todos estáticos** (10,8 KB no `mfcc_estagios.c`: a janela, os buffers da FFT, os 479 pesos do Mel, a matriz da DCT e os buffers de um quadro do `mfcc_quadro_coefs()`), e por isso entram na conta de RAM que o linker imprime. A pilha do `mfcc_segmento()` fica em ~0,3 KB (medida com `-fstack-usage` no Cortex-M4). Os buffers de um quadro são estáticos de propósito: o linker só reserva 1 KB de pilha (`_Min_Stack_Size`), e 2,4 KB na pilha passariam dessa reserva sem nenhum aviso. Com a cadeia e o `lda_escore()` ligados ao firmware, a RAM vai a ~18 KB e o código a mais na flash é de cerca de 2 KB, dos quais ~0,6 KB são o `logf`. As funções não são reentrantes (buffers estáticos): chame a cadeia de um só contexto. O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
 
 **Banco de Mel esparso.** Os 20 triângulos guardam só os pesos não nulos: o filtro `m` começa no bin `l` e tem `r − l` pesos, num vetor único de 479 floats (1,9 KB), em vez da matriz densa 20 × 257 (20 KB). As 22 bordas são constantes copiadas do contrato ("Valores exatos para conferir"); o `test_mel_bordas` (compilado com o harness) as recalcula pela fórmula HTK em float64 e confere, e falha se algum filtro ficar degenerado:
 
 ```bash
 ./build/harness/test_mel_bordas     # MEL BORDAS OK (22 bordas, 479 pesos)
+./build/harness/test_log_dct        # LOG DCT OK (matriz da DCT, épsilon somado, ddof = 0)
 ```
 
-### Portar um estágio novo (log e DCT: blocos 4 e 5)
+O `test_log_dct` confere o que as referências não exercitam: a matriz da DCT contra a fórmula em float64 (a menos de 10⁻⁷) e com linhas ortonormais, o épsilon do log somado (com `mel = 1e-10`, a soma dá `ln(2e-10)` e o piso daria `ln(1e-10)`) e o desvio populacional num caso conhecido.
 
-1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro (por exemplo, `mfcc_log(const float mel[20], float logmel[20])`), sem buffers do segmento inteiro.
+**Na placa:**
+
+```c
+float x[2 * MFCC_N_COEFS];          // 13 médias e 13 desvios, a ordem do modelo
+if (mfcc_segmento(pcm, x) == 0) {   // as 12.800 amostras int16 de 1 s
+    escore = lda_escore(x);         // lda_modelo.h
+}
+```
+
+O `mfcc_segmento()` devolve −3 (e zeros) se o `mfcc_estagios_init()` não rodou ou falhou: sem ele, as tabelas ficam zeradas e o escore sairia igual ao bias da LDA, sem nenhum aviso.
+
+O `mfcc_segmento()` é o laço do comentário do `mfcc_estagios.h`, e o `mfcc_quadro_coefs()` faz um quadro (int16 → 13 coeficientes). Para medir cada bloco com o DWT, como no `blocos13`, chame as funções de cada estágio separadas.
+
+### Portar um estágio novo
+
+Para um estágio que entre depois (o pente harmônico, se for adotado, por exemplo):
+
+1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro, sem buffers do segmento inteiro.
 2. No `harness.c`, marque o estágio em `PORTADO[]`.
 3. No `harness.c`, chame a função no laço de quadros de `rodar_isolado()`, com a referência do estágio anterior, e no laço de `rodar_encadeado()`, com a saída em C do anterior.
 4. Recompile e rode. O estágio passa a ter linha própria, nos dois modos, contra a tolerância do A4.
@@ -291,7 +328,7 @@ Números do build Debug, em bytes, com KiB entre parênteses. O relatório do li
 | FFT real de 512 pontos (float32), medida com o contador DWT | 35.677 ciclos = 356,8 µs a 100 MHz |
 | Blocos 1 a 3 por quadro (janela, espectro e Mel), DWT, mediana dos 490 quadros | 56.240 ciclos = 562 µs (janela 10.723, espectro 40.632, Mel 4.830) |
 | Blocos 1 a 3 no segmento de 1 s (98 quadros), DWT, mediana dos 5 segmentos | 5.509.208 ciclos = 55,1 ms (5,5 % do tempo real) |
-| Flash usada (firmware atual) | 24.592 B de 512 KB (4,7%) |
+| Flash usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
 | RAM usada | 7.216 B de 128 KB (5,5%) |
 
 Um quadro de 320 amostras a 12,8 kHz dura 25 ms; a FFT ocupa cerca de 1,5% desse tempo.
