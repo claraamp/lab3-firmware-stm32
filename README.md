@@ -226,7 +226,7 @@ Todos os estágios estão portados: a escala, a janela, o espectro (FFT real de 
 
 **O harness pega os erros clássicos destes blocos.** Testado com o código estragado de propósito: `log10f` no lugar do `logf`, a DCT sem a escala ortonormal, a DCT sem o c0 e o desvio amostral (`ddof = 1`) reprovam com erro de 100 a 10⁷ vezes a tolerância. O épsilon como piso (`max(mel, 1e-10)`) passaria, porque nenhum quadro das referências tem Mel tão pequeno; quem o pega é o `test_log_dct`.
 
-**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia inteira usa cerca de 11 KB: 8,4 KB fixos do `mfcc_estagios.c` (a janela, os buffers da FFT, os 479 pesos do Mel e a matriz da DCT) e cerca de 2,7 KB de pilha no `mfcc_segmento()` (medidos com `-fstack-usage` no Cortex-M4). Com a cadeia e o `lda_escore()` ligados ao firmware, o código a mais na flash é de cerca de 2 KB, dos quais ~0,6 KB são o `logf`. O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia inteira usa cerca de 11 KB de RAM, **todos estáticos** (10,8 KB no `mfcc_estagios.c`: a janela, os buffers da FFT, os 479 pesos do Mel, a matriz da DCT e os buffers de um quadro do `mfcc_quadro_coefs()`), e por isso entram na conta de RAM que o linker imprime. A pilha do `mfcc_segmento()` fica em ~0,3 KB (medida com `-fstack-usage` no Cortex-M4). Os buffers de um quadro são estáticos de propósito: o linker só reserva 1 KB de pilha (`_Min_Stack_Size`), e 2,4 KB na pilha passariam dessa reserva sem nenhum aviso. Com a cadeia e o `lda_escore()` ligados ao firmware, a RAM vai a ~18 KB e o código a mais na flash é de cerca de 2 KB, dos quais ~0,6 KB são o `logf`. As funções não são reentrantes (buffers estáticos): chame a cadeia de um só contexto. O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
 
 **Banco de Mel esparso.** Os 20 triângulos guardam só os pesos não nulos: o filtro `m` começa no bin `l` e tem `r − l` pesos, num vetor único de 479 floats (1,9 KB), em vez da matriz densa 20 × 257 (20 KB). As 22 bordas são constantes copiadas do contrato ("Valores exatos para conferir"); o `test_mel_bordas` (compilado com o harness) as recalcula pela fórmula HTK em float64 e confere, e falha se algum filtro ficar degenerado:
 
@@ -241,9 +241,12 @@ O `test_log_dct` confere o que as referências não exercitam: a matriz da DCT c
 
 ```c
 float x[2 * MFCC_N_COEFS];          // 13 médias e 13 desvios, a ordem do modelo
-mfcc_segmento(pcm, x);              // as 12.800 amostras int16 de 1 s
-const float escore = lda_escore(x); // lda_modelo.h
+if (mfcc_segmento(pcm, x) == 0) {   // as 12.800 amostras int16 de 1 s
+    escore = lda_escore(x);         // lda_modelo.h
+}
 ```
+
+O `mfcc_segmento()` devolve −3 (e zeros) se o `mfcc_estagios_init()` não rodou ou falhou: sem ele, as tabelas ficam zeradas e o escore sairia igual ao bias da LDA, sem nenhum aviso.
 
 O `mfcc_segmento()` é o laço do comentário do `mfcc_estagios.h`, e o `mfcc_quadro_coefs()` faz um quadro (int16 → 13 coeficientes). Para medir cada bloco com o DWT, como no `blocos13`, chame as funções de cada estágio separadas.
 

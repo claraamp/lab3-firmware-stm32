@@ -14,6 +14,7 @@
 
 static float janela_hann[MFCC_N_QUADRO];
 static arm_rfft_fast_instance_f32 rfft;
+static int pronto;   /* 1 depois de um mfcc_estagios_init() sem erro */
 
 /* Bordas do banco de Mel, copiadas do docs/contrato_numerico.md ("Valores exatos
  * para conferir"): floor(513 * f / 12800) nos 22 pontos igualmente espacados na
@@ -55,6 +56,7 @@ static float cos_pi_m_2n(int m)
 
 int mfcc_estagios_init(void)
 {
+    pronto = 0;
     /* w[n] = 0,5 - 0,5 cos(2 pi n / (N - 1)), simetrica: calcula a metade e espelha,
      * para w[n] = w[N-1-n] exato e w[0] = w[N-1] = 0. */
     const float k = 6.28318530717958647692f / (float)(MFCC_N_QUADRO - 1);
@@ -110,7 +112,11 @@ int mfcc_estagios_init(void)
             dct_matriz[k][n] = (k == 0 ? s0 : s1) * cos_pi_m_2n(k * (2 * n + 1));
         }
     }
-    return arm_rfft_fast_init_f32(&rfft, MFCC_N_FFT) == ARM_MATH_SUCCESS ? 0 : -1;
+    if (arm_rfft_fast_init_f32(&rfft, MFCC_N_FFT) != ARM_MATH_SUCCESS) {
+        return -1;
+    }
+    pronto = 1;
+    return 0;
 }
 
 const float *mfcc_janela_hann(void)
@@ -188,8 +194,11 @@ const float *mfcc_dct_matriz(void)
 
 void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS])
 {
-    /* buffers de um quadro na pilha: ~2,5 KB */
-    float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
+    /* Buffers de um quadro estaticos (2,4 KB), e nao na pilha: assim entram na conta
+     * de RAM do linker. A pilha nao entra (o linker so reserva o _Min_Stack_Size, 1 KB),
+     * e 2,4 KB nela passariam dessa reserva sem aviso. Como o mfcc_espectro, nao e
+     * reentrante: chamar de um so contexto (nao de uma interrupcao e do laco ao mesmo tempo). */
+    static float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
     mfcc_quadro_pcm(pcm, quadro);
     mfcc_espectro(quadro, potencia);
     mfcc_mel(potencia, mel);
@@ -197,8 +206,13 @@ void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEF
     mfcc_dct(mel, coefs);
 }
 
-void mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS])
+int mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS])
 {
+    if (!pronto) {
+        /* sem o init, as tabelas estao zeradas e o escore sairia o bias da LDA, sem aviso */
+        memset(caracteristicas, 0, sizeof(float) * 2 * MFCC_N_COEFS);
+        return -3;
+    }
     mfcc_resumo_t r;
     float coefs[MFCC_N_COEFS];
     mfcc_resumo_iniciar(&r);
@@ -208,6 +222,7 @@ void mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 *
     }
     /* ordem do JSON do modelo: as 13 medias e depois os 13 desvios */
     mfcc_resumo_finalizar(&r, &caracteristicas[0], &caracteristicas[MFCC_N_COEFS]);
+    return 0;
 }
 
 void mfcc_resumo_iniciar(mfcc_resumo_t *r)

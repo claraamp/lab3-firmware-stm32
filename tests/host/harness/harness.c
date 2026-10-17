@@ -37,6 +37,11 @@
 #ifndef TEM_LDA
 #define TEM_LDA 0
 #endif
+#if TEM_LDA
+/* o vetor do mfcc_segmento() e o do lda_escore() tem que ter o mesmo tamanho */
+_Static_assert(LDA_N_FEATURES == 2 * MFCC_N_COEFS,
+               "lda_modelo.h espera outro numero de caracteristicas que o mfcc_estagios.h");
+#endif
 
 #define REFS_PADRAO "../diagnostico-acustico-motores/reports/c_reference/estagios"
 #define MAX_CAMINHO 1024
@@ -453,8 +458,7 @@ static int rodar_encadeado(const segmento_t *s)
 
     /* a chamada unica da placa tem que dar exatamente o mesmo que o laco acima */
     float x_seg[2 * MFCC_N_COEFS];
-    mfcc_segmento(s->entrada, x_seg);
-    if (memcmp(x, x_seg, sizeof x) != 0) {
+    if (mfcc_segmento(s->entrada, x_seg) != 0 || memcmp(x, x_seg, sizeof x) != 0) {
         fprintf(stderr, "erro: %s: mfcc_segmento() difere do laco estagio a estagio\n", s->pasta);
         segmento_difere = 1;
     }

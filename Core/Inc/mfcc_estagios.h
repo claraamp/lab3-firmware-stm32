@@ -11,11 +11,12 @@
  * placa, o segmento de 1 s inteiro sai de uma chamada:
  *
  *     float x[2 * MFCC_N_COEFS];                 // 13 medias e 13 desvios
- *     mfcc_segmento(pcm, x);                     // pcm: as 12.800 amostras int16
- *     const float escore = lda_escore(x);        // lda_modelo.h
+ *     if (mfcc_segmento(pcm, x) == 0)            // pcm: as 12.800 amostras int16
+ *         escore = lda_escore(x);                // lda_modelo.h
  *
- * que, por dentro, e este laco (cerca de 11 KB de RAM: ~8,4 KB fixos deste modulo,
- * para a janela, a FFT, o Mel e a DCT, e ~2,7 KB de pilha por quadro):
+ * que, por dentro, e este laco (cerca de 11 KB de RAM, todos estaticos e na conta
+ * do linker: a janela, a FFT, o Mel, a DCT e os buffers de um quadro; a pilha fica
+ * em ~0,3 KB):
  *
  *     mfcc_resumo_t r;
  *     mfcc_resumo_iniciar(&r);
@@ -53,7 +54,7 @@
 #define MFCC_N_MEL      20
 #define MFCC_N_COEFS    13
 
-/* Tabelas da janela e do banco de Mel e instancia da FFT. Devolve 0 se tudo
+/* Tabelas da janela, do banco de Mel e da DCT e instancia da FFT. Devolve 0 se tudo
  * certo, -1 se a FFT nao inicializou e -2 se a tabela de bordas do Mel e
  * inconsistente (filtro degenerado, fora do espectro ou total de pesos diferente
  * de MFCC_N_PESOS_MEL). Com -2, nada e escrito em mel_pesos. */
@@ -101,7 +102,8 @@ void mfcc_dct(const float logmel[MFCC_N_MEL], float coefs[MFCC_N_COEFS]);
 /* A matriz da DCT, 13 x 20 por linha, para o teste de tabela conferir. */
 const float *mfcc_dct_matriz(void);
 
-/* 1-11 juntos para um quadro: as 320 amostras int16 -> os 13 coeficientes. */
+/* 1-11 juntos para um quadro: as 320 amostras int16 -> os 13 coeficientes. Usa
+ * buffers estaticos (2,4 KB): nao e reentrante, como o mfcc_espectro. */
 void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS]);
 
 /* 12. Media e desvio populacional de cada coeficiente, acumulados quadro a quadro
@@ -121,7 +123,8 @@ void mfcc_resumo_finalizar(const mfcc_resumo_t *r, float media[MFCC_N_COEFS],
 
 /* A cadeia inteira de um segmento de 1 s: as 12.800 amostras int16 -> as 26
  * caracteristicas, na ordem do modelo (13 medias e depois 13 desvios), prontas para
- * o lda_escore(). Exige mfcc_estagios_init() antes. */
-void mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS]);
+ * o lda_escore(). Devolve 0, ou -3 (e zeros) se o mfcc_estagios_init() nao rodou ou
+ * falhou: sem ele as tabelas estao zeradas e o escore seria o bias, sem aviso. */
+int mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS]);
 
 #endif /* MFCC_ESTAGIOS_H */
