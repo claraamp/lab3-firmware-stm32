@@ -6,7 +6,7 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não está aqui; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final).
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC começou em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC").
 
 Ao ligar, a placa:
 
@@ -83,8 +83,11 @@ O diagrama de circuito está em [`hardware/frente1-circuito/`](hardware/frente1-
 ```
 frente1.ioc                  configuração do STM32CubeMX (pinos, clock, USART1)
 Core/                        código da aplicação (main.c e periféricos gerados pelo CubeMX;
-                             marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h)
+                             marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h;
+                             mfcc_estagios.c/.h, os estágios da extração de características
+                             portados para C, ainda fora do build da placa)
 tests/host/                  teste no PC da parte do marco que não usa a HAL
+tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -133,6 +136,81 @@ Duas decisões que valem para todo o projeto:
 
 - **A `CMSISDSP` compila com `-O3` mesmo no preset Debug**, para a medição de ciclos ser parecida com a do firmware final. O resto do projeto continua em `-O0` no Debug.
 - **As tabelas de FFT estão restritas à FFT real de 512 pontos**, pelos defines `ARM_DSP_CONFIG_TABLES` e companhia, na `CMSISDSP`. A inicialização genérica puxava as tabelas de todos os tamanhos e ocupava 83,8 KB de flash; restrita, o DSP ocupa 10,9 KB. **Com esses defines, qualquer tamanho de FFT diferente de 512 faz a `arm_rfft_fast_init_f32` retornar erro** (`status=-1`). Para usar outro tamanho (por exemplo, a FFT de 4.096 pontos do pente harmônico), acrescente os `ARM_TABLE_*` daquele tamanho no `CMakeLists.txt`.
+
+## Harness no PC (porte da extração de características)
+
+O porte da cadeia de MFCC é conferido no PC, estágio a estágio, antes de ir para a placa. O harness em `tests/host/harness/` compila os estágios de `Core/Src/mfcc_estagios.c` com a **implementação genérica em C da CMSIS-DSP** (o mesmo código-fonte de `Drivers/CMSIS/DSP`, sem `ARM_MATH_CM4` nem intrínsecos do Cortex-M) e os compara com as referências do Python.
+
+**De onde vêm as referências e as tolerâncias.** Do repositório do Python ([`diagnostico-acustico-motores`](https://github.com/claraamp/diagnostico-acustico-motores)), em `reports/c_reference/estagios/`, geradas pelo `scripts/pipeline/08_export_stage_references.py`. São a saída em float64 de cada estágio para um segmento de cada gravação, mais o `tolerancias.txt`. As tolerâncias e a métrica de cada estágio estão no `docs/contrato_numerico.md` de lá, seção "Tolerâncias por estágio (A4)". Não é preciso rodar o Python: as referências são versionadas. Basta clonar os dois repositórios **lado a lado**:
+
+```
+Lab3/
+├── diagnostico-acustico-motores/
+└── lab3-firmware-stm32/
+```
+
+### Compilador do PC
+
+O harness usa o compilador do PC, não o `arm-none-eabi-gcc`. O CMake e o Ninja do STM32CubeCLT servem.
+
+- **Linux:** `sudo apt install gcc cmake ninja-build`.
+- **Windows:** o CubeCLT não traz compilador para o PC. A opção mais simples é o **WinLibs** (gcc do MinGW-w64): `winget install BrechtSanders.WinLibs.POSIX.UCRT`, e depois abrir um terminal novo. Confira com `gcc --version`. O MSYS2 (`pacman -S mingw-w64-ucrt-x86_64-gcc`) também serve. O harness foi compilado com gcc no Linux e com MinGW-w64; o MSVC não foi testado.
+
+### Compilar e rodar
+
+Na raiz deste repositório:
+
+```bash
+cmake -S tests/host/harness -B build/harness -G Ninja
+cmake --build build/harness
+./build/harness/harness                 # Linux
+build\harness\harness.exe               # Windows (PowerShell ou cmd)
+```
+
+Sem argumentos, ele lê `../diagnostico-acustico-motores/reports/c_reference/estagios`. Opções:
+
+- `--refs PASTA`: as referências em outro lugar;
+- `--modo isolado|encadeado|ambos` (padrão: `ambos`);
+- `-v`: uma linha por segmento.
+
+### Como ler a saída
+
+Para cada modo, uma linha por estágio com:
+
+- `erro_abs`: o maior `|c − r|`;
+- `erro_rel`: o maior `|c − r|` dividido pelo maior `|r|` do estágio;
+- `metrica_A4`: a métrica do contrato para aquele estágio;
+- `tol` e `razao`: a tolerância e quanto dela foi usado;
+- o pior segmento;
+- a situação: `OK`, `FALHOU` ou `nao portado`.
+
+```
+modo isolado (cada estagio recebe a referencia do anterior)
+estagio   metrica      erro_abs   erro_rel  metrica_A4      tol   razao  pior segmento            situacao
+escala    rel_quadro  2.955e-08  4.332e-08   4.332e-08    1e-06    4.3%  normal_seg0029           OK
+janela    rel_quadro  1.036e-07  1.246e-07   1.654e-07    5e-06    3.3%  bpfi_1.0mm_seg0147       OK
+espectro  rel_quadro  2.739e-04  3.035e-07   3.745e-07    5e-06    7.5%  bpfo_0.3mm_seg0206       OK
+mel       rel_quadro          -          -           -    5e-06       -  -                        nao portado
+...
+```
+
+- **Isolado:** cada estágio recebe a referência do anterior, em float32. Confere um bloco mesmo com a cadeia incompleta.
+- **Encadeado:** a cadeia em C desde o `int16`, como na placa, até o primeiro estágio não portado.
+
+O programa termina com `HARNESS OK`, código 0, se todos os estágios portados ficaram dentro da tolerância. Termina com `HARNESS FALHOU`, código 1, se algum passou dela. Termina com código 2 se não conseguiu usar as referências: faltam o `tolerancias.txt` ou o `modelo.txt`, o `tolerancias.txt` tem uma métrica desconhecida (só valem `rel_quadro`, `abs` e `rel`), as referências são de outro modelo, um arquivo não tem a forma esperada do estágio (por exemplo, a janela tem que ser 98 × 320) ou uma referência tem zero onde a métrica do A4 não se aplica (o `dsp.erro_estagio` do Python recusa o mesmo caso).
+
+Hoje estão portados a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10.
+
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia usa cerca de 8 KB: 5,4 KB fixos do `mfcc_estagios.c` (a janela e os buffers da FFT) e 2,5 KB de pilha no laço (medidos com `-fstack-usage` no Cortex-M4). O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+
+### Portar um estágio novo (Mel, log e DCT: blocos 3 a 5)
+
+1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro (por exemplo, `mfcc_mel(const float potencia[257], float mel[20])`), sem buffers do segmento inteiro.
+2. No `harness.c`, marque o estágio em `PORTADO[]`.
+3. No `harness.c`, chame a função no laço de quadros de `rodar_isolado()`, com a referência do estágio anterior, e no laço de `rodar_encadeado()`, com a saída em C do anterior.
+4. Recompile e rode. O estágio passa a ter linha própria, nos dois modos, contra a tolerância do A4.
+
+Se o estágio falhar, a coluna "Onde o porte costuma divergir" do contrato lista as causas mais comuns: Slaney em vez de HTK, `log10`, DCT sem a escala ortonormal e outras.
 
 ## Medições
 
