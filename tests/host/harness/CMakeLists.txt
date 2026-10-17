@@ -32,6 +32,7 @@ add_library(cmsisdsp_host STATIC
     ${DSP}/Source/CommonTables/arm_const_structs.c
     ${DSP}/Source/ComplexMathFunctions/arm_cmplx_mag_squared_f32.c
     ${DSP}/Source/BasicMathFunctions/arm_mult_f32.c
+    ${DSP}/Source/BasicMathFunctions/arm_dot_prod_f32.c
 )
 target_include_directories(cmsisdsp_host
     PUBLIC  ${DSP}/Include
@@ -63,3 +64,28 @@ elseif(MSVC)
     target_compile_options(harness PRIVATE /W3)
     target_compile_definitions(harness PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
+
+# Teste das bordas do banco de Mel (tests/host/test_mel_bordas.c) e emulador do
+# teste dos blocos 1 a 3 na placa (tests/host/blocos13/): usam os mesmos estagios
+# e a mesma CMSIS-DSP generica do harness.
+add_executable(test_mel_bordas
+    ${RAIZ}/tests/host/test_mel_bordas.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+)
+add_executable(emular_blocos13
+    ${RAIZ}/tests/host/blocos13/emular_blocos13.c
+    ${RAIZ}/Core/Src/blocos13.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+)
+target_compile_definitions(emular_blocos13 PRIVATE BLOCOS13_HOST)
+foreach(alvo test_mel_bordas emular_blocos13)
+    target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
+    target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        target_compile_options(${alvo} PRIVATE -Wall -Wextra -Wdouble-promotion)
+        target_link_libraries(${alvo} PRIVATE m)
+    elseif(MSVC)
+        target_compile_options(${alvo} PRIVATE /W3)
+        target_compile_definitions(${alvo} PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
+endforeach()

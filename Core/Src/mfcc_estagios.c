@@ -15,6 +15,21 @@
 static float janela_hann[MFCC_N_QUADRO];
 static arm_rfft_fast_instance_f32 rfft;
 
+/* Bordas do banco de Mel, copiadas do docs/contrato_numerico.md ("Valores exatos
+ * para conferir"): floor(513 * f / 12800) nos 22 pontos igualmente espacados na
+ * escala HTK, de 20 Hz a 6.400 Hz. Sao constantes da cadeia congelada em 13/10; o
+ * teste tests/host/test_mel_bordas.c recalcula pela formula e confere. Com elas, a
+ * correcao de filtros degenerados do dsp.py (c == l ou r == c) nunca e acionada. */
+static const uint16_t mel_bordas[MFCC_N_MEL + 2] = {
+    0, 4, 7, 11, 16, 21, 27, 33, 40, 48, 57, 67, 78, 90, 104, 119, 136, 155, 177, 200, 227, 256};
+
+/* Pesos nao nulos de cada filtro, em sequencia: o filtro m comeca no bin
+ * mel_bordas[m] e tem mel_bordas[m + 2] - mel_bordas[m] pesos, a partir de
+ * mel_pesos[mel_inicio[m]]. O primeiro peso de cada filtro (bin l) e 0, como no
+ * Python; fica na tabela para o indice do bin continuar simples. */
+static float mel_pesos[MFCC_N_PESOS_MEL];
+static uint16_t mel_inicio[MFCC_N_MEL];
+
 int mfcc_estagios_init(void)
 {
     /* w[n] = 0,5 - 0,5 cos(2 pi n / (N - 1)), simetrica: calcula a metade e espelha,
@@ -27,6 +42,23 @@ int mfcc_estagios_init(void)
     }
     janela_hann[0] = 0.0f;
     janela_hann[MFCC_N_QUADRO - 1] = 0.0f;
+
+    /* Banco de Mel (dsp.mel_filterbank): subida (k - l)/(c - l) em [l, c) e descida
+     * (r - k)/(r - c) em [c, r); o bin r fica fora. */
+    uint16_t pos = 0;
+    for (int m = 0; m < MFCC_N_MEL; ++m) {
+        const int l = mel_bordas[m], c = mel_bordas[m + 1], r = mel_bordas[m + 2];
+        mel_inicio[m] = pos;
+        for (int k = l; k < c; ++k) {
+            mel_pesos[pos++] = (float)(k - l) / (float)(c - l);
+        }
+        for (int k = c; k < r; ++k) {
+            mel_pesos[pos++] = (float)(r - k) / (float)(r - c);
+        }
+    }
+    if (pos != MFCC_N_PESOS_MEL) {
+        return -2;   /* tabela de bordas e MFCC_N_PESOS_MEL fora de sincronia */
+    }
     return arm_rfft_fast_init_f32(&rfft, MFCC_N_FFT) == ARM_MATH_SUCCESS ? 0 : -1;
 }
 
@@ -67,6 +99,20 @@ void mfcc_espectro(const float quadro[MFCC_N_QUADRO], float potencia[MFCC_N_BINS
     potencia[0] = saida[0] * saida[0];
     potencia[MFCC_N_BINS - 1] = saida[1] * saida[1];
     arm_cmplx_mag_squared_f32(&saida[2], &potencia[1], MFCC_N_BINS - 2);
+}
+
+void mfcc_mel(const float potencia[MFCC_N_BINS], float mel[MFCC_N_MEL])
+{
+    for (int m = 0; m < MFCC_N_MEL; ++m) {
+        const uint16_t l = mel_bordas[m];
+        const uint32_t n = (uint32_t)(mel_bordas[m + 2] - l);
+        arm_dot_prod_f32(&potencia[l], &mel_pesos[mel_inicio[m]], n, &mel[m]);
+    }
+}
+
+const uint16_t *mfcc_mel_bordas(void)
+{
+    return mel_bordas;
 }
 
 void mfcc_resumo_iniciar(mfcc_resumo_t *r)

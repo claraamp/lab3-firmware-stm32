@@ -6,7 +6,7 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC começou em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC").
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC começou em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"). Os blocos 1 a 3 (janela, espectro e Mel) já rodam na placa, com a saída conferida contra o Python pela serial (seção "Blocos 1 a 3 na placa").
 
 Ao ligar, a placa:
 
@@ -17,7 +17,8 @@ Ao ligar, a placa:
    ```
 
    O pico no bin 32 com magnitude 256,0 (= N/2) é o valor teórico esperado.
-2. **confere a LDA em todos os segmentos** do `lda_vetores_teste.h`: calcula o escore com o `lda_escore()` do `lda_modelo.h`, compara com o escore do `escores_referencia.csv` e manda uma linha por segmento, um resumo e `MARCO OK` ou `MARCO FALHOU`:
+2. com a opção `BLOCOS13` do CMake (ligada por padrão), roda os **blocos 1 a 3** nos 5 segmentos de referência e manda a saída de cada bloco em binário, para o `receber_blocos13.py` (seção "Blocos 1 a 3 na placa"). Leva cerca de 100 s a 115200 baud;
+3. **confere a LDA em todos os segmentos** do `lda_vetores_teste.h`: calcula o escore com o `lda_escore()` do `lda_modelo.h`, compara com o escore do `escores_referencia.csv` e manda uma linha por segmento, um resumo e `MARCO OK` ou `MARCO FALHOU`:
 
    ```
    marco13 modelo=exp239 json=ee0c3e088366 n_features=26 segmentos=295 clock=100MHz
@@ -28,7 +29,7 @@ Ao ligar, a placa:
    ```
 
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
-3. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` na serial. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O LED da placa (PC13) fica aceso depois da conferência.
+4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` na serial. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O LED da placa (PC13) fica aceso depois da conferência.
 
 ### Cabeçalhos do modelo
 
@@ -85,9 +86,11 @@ frente1.ioc                  configuração do STM32CubeMX (pinos, clock, USART1
 Core/                        código da aplicação (main.c e periféricos gerados pelo CubeMX;
                              marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h;
                              mfcc_estagios.c/.h, os estágios da extração de características
-                             portados para C, ainda fora do build da placa)
+                             portados para C; blocos13.c/.h e blocos13_entrada.h, o teste
+                             dos blocos 1 a 3 na placa)
 tests/host/                  teste no PC da parte do marco que não usa a HAL
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
+tests/host/blocos13/         gerador da entrada, emulador e receptor do teste dos blocos 1 a 3
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -199,24 +202,82 @@ mel       rel_quadro          -          -           -    5e-06       -  -      
 
 O programa termina com `HARNESS OK`, código 0, se todos os estágios portados ficaram dentro da tolerância. Termina com `HARNESS FALHOU`, código 1, se algum passou dela. Termina com código 2 se não conseguiu usar as referências: faltam o `tolerancias.txt` ou o `modelo.txt`, o `tolerancias.txt` tem uma métrica desconhecida (só valem `rel_quadro`, `abs` e `rel`), as referências são de outro modelo, um arquivo não tem a forma esperada do estágio (por exemplo, a janela tem que ser 98 × 320) ou uma referência tem zero onde a métrica do A4 não se aplica (o `dsp.erro_estagio` do Python recusa o mesmo caso).
 
-Hoje estão portados a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10.
+Hoje estão portados a escala, a janela, o espectro (FFT real de 512 da CMSIS, com o empacotamento de DC e Nyquist), o banco de Mel (bloco 3, esparso) e a média e o desvio (Welford, bloco 6). O escore é conferido com o `lda_modelo.h` do marco de 13/10.
 
-**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia usa cerca de 8 KB: 5,4 KB fixos do `mfcc_estagios.c` (a janela e os buffers da FFT) e 2,5 KB de pilha no laço (medidos com `-fstack-usage` no Cortex-M4). O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia usa cerca de 10 KB: 7,3 KB fixos do `mfcc_estagios.c` (a janela, os buffers da FFT e os 479 pesos do Mel) e 2,5 KB de pilha no laço (medidos com `-fstack-usage` no Cortex-M4). O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
 
-### Portar um estágio novo (Mel, log e DCT: blocos 3 a 5)
+**Banco de Mel esparso.** Os 20 triângulos guardam só os pesos não nulos: o filtro `m` começa no bin `l` e tem `r − l` pesos, num vetor único de 479 floats (1,9 KB), em vez da matriz densa 20 × 257 (20 KB). As 22 bordas são constantes copiadas do contrato ("Valores exatos para conferir"); o `test_mel_bordas` (compilado com o harness) as recalcula pela fórmula HTK em float64 e confere, e falha se algum filtro ficar degenerado:
 
-1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro (por exemplo, `mfcc_mel(const float potencia[257], float mel[20])`), sem buffers do segmento inteiro.
+```bash
+./build/harness/test_mel_bordas     # MEL BORDAS OK (22 bordas, 479 pesos)
+```
+
+### Portar um estágio novo (log e DCT: blocos 4 e 5)
+
+1. Escreva a função em `Core/Src/mfcc_estagios.c` (declarada em `Core/Inc/mfcc_estagios.h`), sem HAL, seguindo a linha do estágio no `docs/contrato_numerico.md`. Ela recebe **um quadro** e devolve o resultado desse quadro (por exemplo, `mfcc_log(const float mel[20], float logmel[20])`), sem buffers do segmento inteiro.
 2. No `harness.c`, marque o estágio em `PORTADO[]`.
 3. No `harness.c`, chame a função no laço de quadros de `rodar_isolado()`, com a referência do estágio anterior, e no laço de `rodar_encadeado()`, com a saída em C do anterior.
 4. Recompile e rode. O estágio passa a ter linha própria, nos dois modos, contra a tolerância do A4.
 
 Se o estágio falhar, a coluna "Onde o porte costuma divergir" do contrato lista as causas mais comuns: Slaney em vez de HTK, `log10`, DCT sem a escala ortonormal e outras.
 
+## Blocos 1 a 3 na placa
+
+O `Core/Src/blocos13.c` roda na placa a janela (escala e Hann), o espectro de potência e o banco de Mel nos **mesmos 5 segmentos do harness**, gravados na flash pelo `Core/Inc/blocos13_entrada.h`. Para cada segmento, ele:
+
+1. mede com o DWT os ciclos de cada bloco em cada um dos 98 quadros, os três blocos juntos num quadro e o segmento inteiro (uma passada sem a serial, descontando o custo de ler o contador);
+2. manda a saída de cada bloco pela serial em binário (float32, quadro a quadro), com o CRC-32 de cada bloco. O protocolo está no comentário do `Core/Inc/blocos13.h`.
+
+O `tests/host/blocos13/receber_blocos13.py` recebe tudo, confere modelo, entrada e CRC, grava cada estágio em `.f32` e compara com as referências em float64 pela métrica e pela **tolerância encadeada** do A4 (a placa roda a cadeia desde o `int16`, como o modo encadeado do harness).
+
+### Rodar
+
+Precisa de Python 3 com `numpy` e `pyserial` (`pip install numpy pyserial`), e dos dois repositórios lado a lado, como no harness.
+
+1. Compile e grave o firmware normalmente (preset Debug). A opção `BLOCOS13` já vem ligada.
+2. **Feche o picocom** ou qualquer outro programa na porta: só um programa abre a serial por vez, e o binário aparece como lixo num terminal.
+3. Rode o receptor e, quando ele pedir, aperte o RESET da placa:
+
+   ```bash
+   python3 tests/host/blocos13/receber_blocos13.py --porta /dev/ttyUSB0   # Linux
+   python  tests/host/blocos13/receber_blocos13.py --porta COM5           # Windows
+   ```
+
+4. Em cerca de 100 s ele termina com `BLOCOS13 OK` (código 0) ou `BLOCOS13 FALHOU` (código 1). A captura bruta, os `.f32` de cada estágio e o `resultado.txt` ficam em `build/blocos13/`.
+
+Para comparar de novo uma captura já gravada, sem a placa: `--arquivo build/blocos13/captura.bin`.
+
+### Sem a placa (testar o receptor)
+
+O `emular_blocos13` (compilado com o harness) roda o mesmo `blocos13_rodar()` no PC e grava a captura que a placa mandaria, com os ciclos zerados:
+
+```bash
+./build/harness/emular_blocos13 build/captura_pc.bin
+python3 tests/host/blocos13/receber_blocos13.py --arquivo build/captura_pc.bin --saida build/blocos13_pc
+```
+
+### Trocar os segmentos
+
+O `blocos13_entrada.h` é gerado das referências e não se edita a mão:
+
+```bash
+python3 tests/host/blocos13/gerar_entrada.py                                  # os 5 do segmentos.txt
+python3 tests/host/blocos13/gerar_entrada.py --segmentos normal_seg0029       # só um (25 KB de flash)
+```
+
+Se as referências do Python forem regeneradas com outro modelo, regenere o `.h` e grave de novo: o receptor recusa uma captura com outro modelo ou outra entrada.
+
+### Custo
+
+Com o teste ligado, o firmware ocupa 196 KB de flash (37 %), dos quais 125 KB são os segmentos, e 28 KB de RAM (22 %), dos quais 7,8 KB guardam os ciclos de todos os quadros para o resumo. Com `-DBLOCOS13=OFF`, 61 KB de flash e 7,2 KB de RAM.
+
 ## Medições
 
 | Medida | Valor |
 |---|---|
 | FFT real de 512 pontos (float32), medida com o contador DWT | 35.677 ciclos = 356,8 µs a 100 MHz |
+| Blocos 1 a 3 por quadro (janela, espectro e Mel), DWT, mediana dos 490 quadros | 56.240 ciclos = 562 µs (janela 10.723, espectro 40.632, Mel 4.830) |
+| Blocos 1 a 3 no segmento de 1 s (98 quadros), DWT, mediana dos 5 segmentos | 5.509.208 ciclos = 55,1 ms (5,5 % do tempo real) |
 | Flash usada (firmware atual) | 24.592 B de 512 KB (4,7%) |
 | RAM usada | 7.216 B de 128 KB (5,5%) |
 
