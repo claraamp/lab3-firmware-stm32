@@ -29,6 +29,9 @@
 #ifdef FIRMWARE_BLOCOS13
 #include "blocos13.h"
 #endif
+#ifdef FIRMWARE_VALIDACAO_PLACA
+#include "validacao_placa.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -158,6 +161,13 @@ int main(void)
    * DWT e a saida de cada bloco pela serial, para o receber_blocos13.py. Cerca de
    * 100 s a 115200 baud; o marco vem depois. */
   blocos13_executar();
+#endif
+
+#ifdef FIRMWARE_VALIDACAO_PLACA
+  /* Validacao do segmento completo: mfcc_segmento() e lda_escore() nos 10 segmentos
+   * dos clipes, com as 26 caracteristicas e o escore pela serial, para o
+   * validar_blocos.py --placa. Menos de 1 s. */
+  validacao_placa_executar();
 #endif
 
   /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */

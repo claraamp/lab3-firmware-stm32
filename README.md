@@ -90,11 +90,14 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              marco_lda.c/.h e os cabeçalhos do modelo, lda_modelo.h e lda_vetores_teste.h;
                              mfcc_estagios.c/.h, os estágios da extração de características
                              portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
-                             placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C)
+                             placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C;
+                             validacao_placa.c/.h, o teste do segmento completo na placa)
 tests/host/                  teste no PC da parte do marco que não usa a HAL e testes das tabelas
                              (test_mel_bordas.c, test_log_dct.c)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
+tests/host/validacao/        validação independente bloco a bloco (exportador do C e comparador em Python)
+docs/validacao-blocos.md     tabela de erros por bloco (PC, 295 segmentos) e o teste na placa
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -320,6 +323,10 @@ Números do build Debug, em bytes, com KiB entre parênteses. O relatório do li
 - **O recorte a 51,2 kHz** do `clipes_demo.h` (102.696 B) só entra quando a decimação embarcada o usar.
 - **Com o teste desligado** e sem a integração dos clipes, nada do `clipes_demo.h` é usado, e o `--gc-sections` tira tudo do link.
 - **A flash varia ~1,6 KB entre máquinas** com versões diferentes da toolchain: o mesmo commit deu 322.800, 322.840 e 324.416 B com o teste ligado.
+
+## Validação bloco a bloco
+
+A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
 
 ## Medições
 
