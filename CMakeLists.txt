@@ -80,6 +80,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/marco_lda.c
     Core/Src/mfcc_estagios.c
+    # pacote da serial (formato v1) e o formatador de ponto fixo que ele e o marco usam
+    Core/Src/pacote_serial.c
+    Core/Src/texto_fixo.c
     # clipes de audio da Frente 3C (clipes_demo.h, gerado no repositorio do Python);
     # o que nenhum .c usa sai no link pelo --gc-sections
     Core/Src/clipes_demo.c

@@ -19,6 +19,7 @@
 #include "lda_modelo.h"
 #include "lda_vetores_teste.h"
 #include "mfcc_estagios.h"
+#include "texto_fixo.h"
 
 _Static_assert(VT_N_FEATURES == LDA_N_FEATURES,
                "lda_vetores_teste.h e lda_modelo.h com numero de caracteristicas diferente");
@@ -70,24 +71,18 @@ void marco_avaliar(uint16_t i, marco_resultado_t *r)
 
 int marco_fmt_fixo(char *buf, size_t n, float v, unsigned casas)
 {
-    static const uint32_t pot10[] = {1u, 10u, 100u, 1000u, 10000u, 100000u, 1000000u};
-    if (casas > 6u) {
-        casas = 6u;
-    }
-    if (isnan(v)) {
-        return snprintf(buf, n, "nan");
-    }
-    const float a = fabsf(v) * (float)pot10[casas] + 0.5f;
-    if (!(a < 4.0e9f)) {
-        return snprintf(buf, n, "%sinf", v < 0.0f ? "-" : "");
-    }
-    const uint32_t q = (uint32_t)a;
-    const char *sinal = (v < 0.0f && q != 0u) ? "-" : "";
-    if (casas == 0u) {
-        return snprintf(buf, n, "%s%lu", sinal, (unsigned long)q);
-    }
-    return snprintf(buf, n, "%s%lu.%0*lu", sinal, (unsigned long)(q / pot10[casas]),
-                    (int)casas, (unsigned long)(q % pot10[casas]));
+    return texto_fixo(buf, n, v, casas);
+}
+
+void marco_pacote(uint16_t i, const marco_resultado_t *r, uint32_t n, uint32_t ciclos,
+                  pacote_segmento_t *p)
+{
+    p->n = n;
+    p->origem = (char)PACOTE_ORIGEM_REFERENCIA;
+    p->clipe = (int32_t)vt_gravacao[i];
+    p->segmento = (int32_t)vt_segmento[i];
+    p->ciclos = ciclos;
+    pacote_decidir(p, r->escore, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
 }
 
 int marco_linha(char *buf, size_t n, const char *prefixo, uint16_t i,
@@ -160,6 +155,11 @@ static uint32_t avaliar_medindo(uint16_t i, marco_resultado_t *r, uint32_t custo
     return c > custo_leitura ? c - custo_leitura : 0u;
 }
 
+/* Custo de ler o DWT, medido no marco_lda_verificar(), e contador dos pacotes
+ * $SEG desde o boot (o painel usa para ver pacotes perdidos). */
+static uint32_t custo_leitura_dwt = 0u;
+static uint32_t n_pacotes = 0u;
+
 static uint32_t us_x100(uint32_t ciclos)
 {
     const uint32_t mhz = SystemCoreClock / 1000000u;
@@ -188,10 +188,17 @@ int marco_lda_verificar(void)
         return 0;
     }
 
+    /* Cabecalho do pacote da serial: o painel confere o modelo antes de mostrar
+     * os $SEG da demonstracao. */
+    tx(linha, pacote_cabecalho(linha, sizeof linha, VT_MODELO_ID, VT_JSON_SHA256_12,
+                               (unsigned)LDA_N_FEATURES,
+                               (unsigned)(SystemCoreClock / 1000000u)));
+
     dwt_ligar();
     const uint32_t a = DWT->CYCCNT;
     const uint32_t b = DWT->CYCCNT;
     const uint32_t custo_leitura = b - a;
+    custo_leitura_dwt = custo_leitura;
 
     uint32_t n_ok = 0, n_dec_ok = 0;
     uint32_t c_min = UINT32_MAX, c_max = 0, c_soma = 0;
@@ -252,9 +259,12 @@ void marco_lda_passo(int verificacao_ok)
 
     const uint16_t i = vt_demo[k];
     marco_resultado_t r;
-    marco_avaliar(i, &r);
-    leds(!r.falha, r.falha);
-    tx(linha, marco_linha(linha, sizeof linha, "demo", i, &r, 0u));
+    const uint32_t ciclos = avaliar_medindo(i, &r, custo_leitura_dwt);
+    pacote_segmento_t p;
+    marco_pacote(i, &r, n_pacotes++, ciclos, &p);
+    leds(!p.falha, p.falha);
+    tx(linha, marco_linha(linha, sizeof linha, "demo", i, &r, ciclos));
+    tx(linha, pacote_linha(linha, sizeof linha, &p));
     HAL_Delay(2000);
     leds(0, 0);
     HAL_Delay(300);
