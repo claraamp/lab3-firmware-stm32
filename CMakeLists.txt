@@ -103,6 +103,18 @@ if(BLOCOS13)
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_BLOCOS13)
 endif()
 
+# Build de medida do orcamento de flash e RAM (Core/Src/orcamento.c): poe no link
+# tudo o que o firmware final vai ter e que hoje o --gc-sections descarta (cadeia
+# completa, LDA, os 5 clipes, o recorte de 51,2 kHz e os buffers da decimacao),
+# SEM EXECUTAR nada disso, para medir pelo .map com o tools/orcamento_memoria.py.
+# DESLIGADO por padrao. Para medir: cmake --preset Debug -DORCAMENTO=ON (o valor
+# fica no cache do build, como o BLOCOS13; volte com -DORCAMENTO=OFF).
+option(ORCAMENTO "Build de medida: cadeia, clipes e decimacao no link, sem executar" OFF)
+if(ORCAMENTO)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/orcamento.c)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_ORCAMENTO)
+endif()
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths

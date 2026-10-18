@@ -95,6 +95,7 @@ tests/host/                  teste no PC da parte do marco que não usa a HAL e 
                              (test_mel_bordas.c, test_log_dct.c)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
+tools/                       orcamento_memoria.py: flash e RAM por parte, lidas do .map
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -331,12 +332,46 @@ Números do build Debug, em bytes, com KiB entre parênteses. O relatório do li
 | Flash usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
 | RAM usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 7.216 B de 128 KB (5,5 %) |
 | Flash e RAM com a cadeia (`mfcc_segmento()`) e o `lda_escore()` ligados, sem o teste dos blocos 1 a 3 | ~62,7 KB de flash sem contar o áudio (os 5 clipes de 2 s somam 256 KB) e 18.000 B de RAM (13,7 %) |
+| Firmware final medido no build de medida: cadeia, LDA, 5 clipes, recorte de 51,2 kHz e buffers da decimação no link (seção "Orçamento medido") | 427.152 B de flash (81,5 %) e 23.216 B de RAM (17,7 %) |
 
 As duas primeiras linhas são o build padrão de hoje: ele ainda não chama o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
 
 Um quadro de 320 amostras a 12,8 kHz dura 25 ms; a FFT ocupa cerca de 1,5% desse tempo.
 
-**Orçamento da flash para o áudio:** reservando 64 KB para o resto do firmware (banco de filtros de Mel, DCT, `.h` da LDA, pente harmônico se for adotado e margem), sobram cerca de 434 KB. Em PCM int16 a 12,8 kHz (25.600 B por segundo), isso dá **cerca de 17 s de áudio decimado**. Com 1 s a 51,2 kHz para a demonstração da decimação na placa, sobram cerca de 13 s a 12,8 kHz. A reserva é uma estimativa e deve ser revista quando a matriz de Mel e o pente estiverem definidos.
+**Orçamento da flash para o áudio:** reservando 64 KB para o resto do firmware (banco de filtros de Mel, DCT, `.h` da LDA, pente harmônico se for adotado e margem), sobram cerca de 434 KB. Em PCM int16 a 12,8 kHz (25.600 B por segundo), isso dá **cerca de 17 s de áudio decimado**. Com 1 s a 51,2 kHz para a demonstração da decimação na placa, sobram cerca de 13 s a 12,8 kHz. A reserva é uma estimativa e deve ser revista quando a matriz de Mel e o pente estiverem definidos. A medida com tudo no link (18/10) está logo abaixo.
+
+### Orçamento medido (build de medida)
+
+O build padrão não mostra o orçamento do firmware final: o `--gc-sections` tira do link tudo o que ninguém chama ainda (a cadeia, os clipes, o recorte de 51,2 kHz e a decimação). O **build de medida** (`-DORCAMENTO=ON`, `Core/Src/orcamento.c`) põe essas partes no link **sem executar nenhuma delas**: a chamada fica atrás de uma variável `volatile` que vale sempre 0. Assim, o `.map` mostra o tamanho real de cada parte, e a placa se comporta como no build padrão. Os buffers da decimação têm os tamanhos que o `clipes_demo.h` descreve (estado da CMSIS com 147 + 512 − 1 floats, um bloco de entrada e as saídas de um bloco).
+
+```bash
+cmake --preset Debug -DORCAMENTO=ON -DBLOCOS13=OFF
+cmake --build --preset Debug
+python3 tools/orcamento_memoria.py build/Debug/frente1.map
+```
+
+O valor fica no cache do build, como o do `BLOCOS13`; volte com `-DORCAMENTO=OFF`. O script lê o `.map` e soma as seções de entrada pela parte do firmware a que elas pertencem, contando pelo endereço, porque as strings mescladas pelo linker aparecem no `.map` com o tamanho de antes da mescla. Ele só usa a biblioteca padrão do Python. O total pode diferir em alguns bytes do relatório do linker, que conta também os vãos de alinhamento entre seções.
+
+Resultado em 18/10 (build Debug, com o `main` depois dos blocos 4 a 6):
+
+| Parte | Flash (B) | RAM (B) |
+|---|---:|---:|
+| clipes a 12,8 kHz (5 clipes de 2 s) | 256.215 | 0 |
+| recorte a 51,2 kHz (1 s, com as margens) | 103.284 | 0 |
+| cadeia (MFCC) | 1.276 | 10.788 |
+| decimação (buffers e `arm_fir_decimate_f32`) | 516 | 5.212 |
+| marco e LDA (com os vetores de teste do marco) | 36.502 | 2 |
+| CMSIS-DSP | 11.460 | 0 |
+| HAL e CubeMX | 6.025 | 13 |
+| aplicação base (inclui a FFT de teste da Frente 1) | 2.172 | 5.220 |
+| biblioteca C | 9.528 | 408 |
+| alinhamento e outros | 174 | 33 |
+| reserva de heap e pilha (linker script) | 0 | 1.540 |
+| **total** | **427.152** (81,5 %) | **23.216** (17,7 %) |
+
+- **Flash:** sobram 97.136 B (94,9 KiB). O áudio ocupa 359.499 B. O resto do firmware ocupa 67.653 B, um pouco acima da reserva de 64 KB do orçamento, mas 34.250 B disso são os vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`. Os 94,9 KiB livres equivalem a ~3,8 s a mais de áudio a 12,8 kHz, e são também o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado.
+- **RAM:** sobram 107.856 B (105,3 KiB). Com os ~40 KB do detector de novidade, ainda sobrariam ~65 KiB. Dos 5.220 B da aplicação base, 3.072 B são os buffers da FFT de teste da Frente 1 (`fft_in` e `fft_mag` no `main.c`), que também podem sair do firmware final.
+- **Pilha:** a reserva do linker é só o mínimo (1.024 B), e o linker não avisa se a pilha real passar dela. A cadeia usa ~0,3 KB de pilha (medida pela Amanda com `-fstack-usage`), então cabe. A RAM livre é o espaço para onde a pilha pode crescer.
 
 ## Próximos passos
 
