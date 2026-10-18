@@ -9,7 +9,8 @@
  *     ln(2e-10) e o piso daria ln(1e-10). Nenhum quadro das referencias tem Mel
  *     tao pequeno, entao o harness nao distingue os dois;
  *   - o desvio populacional (ddof = 0) num caso conhecido, e o resumo vazio;
- *   - o mfcc_segmento() recusa rodar (-3, e zeros) antes do mfcc_estagios_init().
+ *   - o mfcc_segmento() e o mfcc_quadro_coefs() recusam rodar (-3, e zeros) antes
+ *     do mfcc_estagios_init().
  *
  * Compilar e rodar (na raiz do repositorio; a CMSIS-DSP generica vem do harness):
  *   cmake -S tests/host/harness -B build/harness -G Ninja && cmake --build build/harness
@@ -42,6 +43,14 @@ int main(void)
     const int st_antes = mfcc_segmento(silencio, x);
     conferir(st_antes == -3, "mfcc_segmento antes do init", (double)st_antes, -3.0);
     conferir(x[0] == 0.0f && x[2 * MFCC_N_COEFS - 1] == 0.0f, "saida zerada antes do init", (double)x[0], 0.0);
+    float c_antes[MFCC_N_COEFS];
+    for (int i = 0; i < MFCC_N_COEFS; ++i) {
+        c_antes[i] = 1.0f;
+    }
+    const int stq_antes = mfcc_quadro_coefs(silencio, c_antes);
+    conferir(stq_antes == -3, "mfcc_quadro_coefs antes do init", (double)stq_antes, -3.0);
+    conferir(c_antes[0] == 0.0f && c_antes[MFCC_N_COEFS - 1] == 0.0f, "coeficientes zerados antes do init",
+             (double)c_antes[0], 0.0);
 
     const int st = mfcc_estagios_init();
     if (st != 0) {
@@ -127,12 +136,15 @@ int main(void)
     conferir(fabs((double)x[0] - sqrt((double)MFCC_N_MEL) * log(1e-10)) < 1e-4, "media do c0 no silencio",
              (double)x[0], sqrt((double)MFCC_N_MEL) * log(1e-10));
     conferir(x[MFCC_N_COEFS] == 0.0f, "desvio do c0 no silencio", (double)x[MFCC_N_COEFS], 0.0);
+    const int stq_depois = mfcc_quadro_coefs(silencio, c_antes);
+    conferir(stq_depois == 0 && c_antes[0] == x[0], "mfcc_quadro_coefs depois do init (silencio = media)",
+             (double)c_antes[0], (double)x[0]);
     if (falhas) {
         printf("LOG DCT FALHOU (%d)\n", falhas);
         return 1;
     }
 
     printf("LOG DCT OK (DCT a %.1e da formula, linhas ortonormais a %.1e; epsilon somado; ddof = 0;"
-           " mfcc_segmento exige o init)\n", erro_max, orto_max);
+           " mfcc_segmento e mfcc_quadro_coefs exigem o init)\n", erro_max, orto_max);
     return 0;
 }

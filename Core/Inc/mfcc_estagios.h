@@ -19,21 +19,21 @@
  * em ~0,3 KB):
  *
  *     mfcc_resumo_t r;
+ *     float coefs[MFCC_N_COEFS];
  *     mfcc_resumo_iniciar(&r);
  *     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
- *         float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
- *         float logmel[MFCC_N_MEL], coefs[MFCC_N_COEFS];
- *         mfcc_quadro_pcm(&pcm[q * MFCC_PASSO], quadro);     // 1-4: escala e janela
- *         mfcc_espectro(quadro, potencia);                    // 5-6: FFT e potencia
- *         mfcc_mel(potencia, mel);                            // 7-9: banco de Mel
- *         mfcc_log(mel, logmel);                              // 10: log
- *         mfcc_dct(logmel, coefs);                            // 11: DCT
- *         mfcc_resumo_acumular(&r, coefs);                    // 12: Welford
+ *         mfcc_quadro_coefs(&pcm[q * MFCC_PASSO], coefs);   // 1-11: um quadro
+ *         mfcc_resumo_acumular(&r, coefs);                   // 12: Welford
  *     }
- *     mfcc_resumo_finalizar(&r, media, desvio);               // as 26 caracteristicas
+ *     mfcc_resumo_finalizar(&r, media, desvio);              // as 26 caracteristicas
+ *
+ * A sequencia dos estagios 1 a 11 de um quadro esta no comentario do
+ * mfcc_quadro_coefs(). Nao copie os buffers do quadro para a pilha (2,4 KB): o
+ * linker so reserva 1 KB de pilha e nao avisa se ela passar disso.
  *
  * O `pcm` pode ficar na flash (clipes gravados) ou num buffer circular de 320
- * amostras int16 (audio ao vivo): os quadros se sobrepoem em 192 amostras.
+ * amostras int16 (audio ao vivo): os quadros se sobrepoem em 192 amostras. Para
+ * audio ao vivo, chame o mfcc_quadro_coefs() a cada passo de 128 amostras.
  *
  * Todos os estagios estao portados: escala, janela, espectro, banco de Mel (bloco
  * 3), log (bloco 4), DCT (bloco 5) e resumo (media e desvio por Welford, bloco 6).
@@ -102,9 +102,18 @@ void mfcc_dct(const float logmel[MFCC_N_MEL], float coefs[MFCC_N_COEFS]);
 /* A matriz da DCT, 13 x 20 por linha, para o teste de tabela conferir. */
 const float *mfcc_dct_matriz(void);
 
-/* 1-11 juntos para um quadro: as 320 amostras int16 -> os 13 coeficientes. Usa
- * buffers estaticos (2,4 KB): nao e reentrante, como o mfcc_espectro. */
-void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS]);
+/* 1-11 juntos para um quadro: as 320 amostras int16 -> os 13 coeficientes. Por
+ * dentro, com buffers ESTATICOS (2,4 KB, na conta do linker; nao e reentrante, como
+ * o mfcc_espectro):
+ *
+ *     mfcc_quadro_pcm(pcm, quadro);       // 1-4: escala e janela
+ *     mfcc_espectro(quadro, potencia);    // 5-6: FFT e potencia
+ *     mfcc_mel(potencia, mel);            // 7-9: banco de Mel
+ *     mfcc_log(mel, mel);                 // 10: log, em lugar
+ *     mfcc_dct(mel, coefs);               // 11: DCT
+ *
+ * Devolve 0, ou -3 (e zeros) se o mfcc_estagios_init() nao rodou ou falhou. */
+int mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS]);
 
 /* 12. Media e desvio populacional de cada coeficiente, acumulados quadro a quadro
  * por Welford, sem guardar os quadros (docs/contrato_numerico.md, "Media e desvio

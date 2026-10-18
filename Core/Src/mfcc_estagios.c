@@ -192,8 +192,13 @@ const float *mfcc_dct_matriz(void)
     return &dct_matriz[0][0];
 }
 
-void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS])
+int mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS])
 {
+    if (!pronto) {
+        /* sem o init, as tabelas estao zeradas: os coeficientes sairiam errados sem aviso */
+        memset(coefs, 0, sizeof(float) * MFCC_N_COEFS);
+        return -3;
+    }
     /* Buffers de um quadro estaticos (2,4 KB), e nao na pilha: assim entram na conta
      * de RAM do linker. A pilha nao entra (o linker so reserva o _Min_Stack_Size, 1 KB),
      * e 2,4 KB nela passariam dessa reserva sem aviso. Como o mfcc_espectro, nao e
@@ -204,6 +209,7 @@ void mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEF
     mfcc_mel(potencia, mel);
     mfcc_log(mel, mel);              /* em lugar: cada saida depende so da entrada de mesmo indice */
     mfcc_dct(mel, coefs);
+    return 0;
 }
 
 int mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * MFCC_N_COEFS])
@@ -217,7 +223,7 @@ int mfcc_segmento(const int16_t pcm[MFCC_N_AMOSTRAS], float caracteristicas[2 * 
     float coefs[MFCC_N_COEFS];
     mfcc_resumo_iniciar(&r);
     for (int q = 0; q < MFCC_N_QUADROS; ++q) {
-        mfcc_quadro_coefs(&pcm[q * MFCC_PASSO], coefs);
+        (void)mfcc_quadro_coefs(&pcm[q * MFCC_PASSO], coefs);   /* nao falha: o pronto ja foi conferido */
         mfcc_resumo_acumular(&r, coefs);
     }
     /* ordem do JSON do modelo: as 13 medias e depois os 13 desvios */

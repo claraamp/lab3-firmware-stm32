@@ -329,7 +329,10 @@ Números do build Debug, em bytes, com KiB entre parênteses. O relatório do li
 | Blocos 1 a 3 por quadro (janela, espectro e Mel), DWT, mediana dos 490 quadros | 56.240 ciclos = 562 µs (janela 10.723, espectro 40.632, Mel 4.830) |
 | Blocos 1 a 3 no segmento de 1 s (98 quadros), DWT, mediana dos 5 segmentos | 5.509.208 ciclos = 55,1 ms (5,5 % do tempo real) |
 | Flash usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
-| RAM usada | 7.216 B de 128 KB (5,5%) |
+| RAM usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 7.216 B de 128 KB (5,5 %) |
+| Flash e RAM com a cadeia (`mfcc_segmento()`) e o `lda_escore()` ligados, sem o teste dos blocos 1 a 3 | ~62,7 KB de flash sem contar o áudio (os 5 clipes de 2 s somam 256 KB) e 18.000 B de RAM (13,7 %) |
+
+As duas primeiras linhas são o build padrão de hoje: ele ainda não chama o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
 
 Um quadro de 320 amostras a 12,8 kHz dura 25 ms; a FFT ocupa cerca de 1,5% desse tempo.
 
