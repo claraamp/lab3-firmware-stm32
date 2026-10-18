@@ -18,9 +18,15 @@
 
 #include "lda_modelo.h"
 #include "lda_vetores_teste.h"
+#include "mfcc_estagios.h"
 
 _Static_assert(VT_N_FEATURES == LDA_N_FEATURES,
                "lda_vetores_teste.h e lda_modelo.h com numero de caracteristicas diferente");
+/* O lda_escore() vai receber o vetor do mfcc_segmento() (13 medias e 13 desvios).
+ * Fica aqui porque este arquivo e sempre compilado no firmware e ja inclui o
+ * lda_modelo.h; o harness tem a mesma conferencia. */
+_Static_assert(LDA_N_FEATURES == 2 * MFCC_N_COEFS,
+               "lda_modelo.h espera outro numero de caracteristicas que o mfcc_segmento() produz");
 
 /* ------------------------------------------------------------------------- */
 /* Sem HAL                                                                    */
