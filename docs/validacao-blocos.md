@@ -6,13 +6,13 @@ Card "Validar cada bloco da cadeia em C contra a referência em Python" (2º par
 
 **No PC, todos os blocos ficam dentro das tolerâncias do A4 nos 295 segmentos da partição**, nos dois modos. A maior margem usada é 11,3% da tolerância (escore, modo encadeado). A cadeia em C, do `int16` ao escore da LDA, dá a **mesma decisão do Python nos 295 segmentos**. A maior diferença de escore contra o `escores_referencia.csv` é 0,0016, contra um menor |escore| de 1.297,2.
 
-**Na placa**, o teste do segmento completo está pronto e conferido com o emulador, mas **ainda não rodou na placa** (seção "Placa").
+**Na placa**, os blocos 1 a 3 (janela, espectro e Mel, com a FFT otimizada da CMSIS) ficam dentro do A4 nos 5 segmentos de referência: reanalisei a captura da placa do PR #3, com pior caso de 7,1%. O teste do segmento completo está pronto e conferido com o emulador, mas **ainda não rodou na placa** (seção "Placa").
 
 | Item do card | Situação |
 |---|---|
 | A4 confirmado no contrato | Feito: `docs/contrato_numerico.md`, seção "Tolerâncias por estágio (A4)", com os valores em `dsp.ESTAGIOS_PORTE` |
 | Bloco a bloco no harness, com maior erro absoluto e relativo | Feito, nos 295 segmentos (tabelas abaixo) |
-| Mesmo teste na placa (FFT da CMSIS otimizada e segmento completo) | Blocos 1 a 3: teste da Clara (`blocos13`). Segmento completo: teste pronto, **falta rodar na placa** |
+| Mesmo teste na placa (FFT da CMSIS otimizada e segmento completo) | Blocos 1 a 3: captura da placa do PR #3 reanalisada, 15/15 OK. Segmento completo: teste pronto, **falta rodar na placa** |
 | Escore final contra o `escores_referencia.csv` | Feito: 295/295 decisões iguais, diferença máxima 0,0016 |
 | Decimação (bloco 0) | Não entrou: ainda não há decimação no firmware |
 | Tabela de erros no repositório | Este arquivo |
@@ -26,7 +26,7 @@ Card "Validar cada bloco da cadeia em C contra a referência em Python" (2º par
   - `log10f` no lugar do `logf`: do log-Mel ao escore, com 236/295 decisões iguais;
   - desvio amostral (`ddof = 1`): desvio e escore.
 
-  Com a captura da placa adulterada, também reprova: um desvio 0,1% maior, e um escore com o sinal trocado (decisão diferente).
+  Com a captura da placa adulterada, também reprova: um desvio 0,1% maior, e um escore com o sinal trocado (decisão diferente). Uma captura incompleta é recusada (código 2): sem o `val FIM`, com menos segmentos que os anunciados no `val inicio` (por exemplo, o picocom fechado cedo demais) ou com um segmento repetido.
 
 ## Tabelas (PC, 295 segmentos)
 
@@ -92,7 +92,15 @@ O card esperava uma diferença de "~0,0007, como no Marco". A cadeia completa ch
 
 ### Blocos 1 a 3 (janela, espectro e Mel): FFT da CMSIS otimizada
 
-O teste `blocos13` da Clara (PR #3) roda os três blocos na placa nos 5 segmentos de referência e compara cada quadro com a tolerância encadeada do A4. O resultado relatado no PR é 15/15 estágios OK, com pior caso de 7,1% (espectro, `bpfi_1.0mm_seg0147`). **Não refiz esse teste na placa**; a captura anexada ao PR não abria quando revisei. Para refazer, siga a seção "Blocos 1 a 3 na placa" do README.
+O teste `blocos13` da Clara (PR #3) roda os três blocos na placa nos 5 segmentos de referência e manda a saída de cada quadro pela serial. Reanalisei a captura da placa anexada ao PR (`captura.bin`, de 17/10) de duas formas: com o `receber_blocos13.py`, que confere o CRC e a entrada de cada bloco, e recalculando a métrica com o `dsp.erro_estagio` do Python sobre os `.f32` gravados. As duas dão o mesmo resultado, **15/15 estágios dentro da tolerância encadeada do A4**:
+
+| Estágio | Pior métrica A4 | % da tolerância | Pior segmento |
+|---|---:|---:|---|
+| janela | 1,7 × 10⁻⁷ | 3,3% | bpfi_1.0mm_seg0147 |
+| espectro | 3,5 × 10⁻⁷ | 7,1% | bpfi_1.0mm_seg0147 |
+| mel | 3,4 × 10⁻⁷ | 6,9% | bpfo_0.3mm_seg0206 |
+
+A placa não repete o PC bit a bit: só 8% a 15% dos valores do espectro são iguais aos do C no PC (de 24% a 32% no Mel e 94% na janela). A FFT otimizada da CMSIS e a FMA do Cortex-M4 fazem as contas em outra ordem. Por isso o teste na placa é necessário, e não só o do PC. Para refazer, siga a seção "Blocos 1 a 3 na placa" do README.
 
 ### Segmento completo (blocos 1 a 6 e escore): falta rodar
 

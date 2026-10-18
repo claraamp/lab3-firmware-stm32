@@ -151,12 +151,17 @@ def comparar_pc(refs: Path, saidas: Path, dsp, csv_ref: dict):
 
 
 def ler_placa(caminho: Path) -> tuple[dict, list]:
-    inicio, segs = None, []
+    """A ultima execucao completa da captura: do 'val inicio' ao 'val FIM', com
+    todos os segmentos anunciados. Uma captura cortada (picocom fechado antes do
+    fim) e recusada, para nao aprovar so uma parte dos segmentos."""
+    inicio, segs, fim = None, [], False
     for bruta in caminho.read_bytes().splitlines():
         linha = bruta.decode("ascii", errors="replace").strip()
         if linha.startswith("val inicio"):
             inicio = dict(p.split("=", 1) for p in linha.split()[2:] if "=" in p)
-            segs = []   # a placa reiniciou: vale a ultima execucao
+            segs, fim = [], False   # a placa reiniciou: vale a ultima execucao
+        elif linha == "val FIM":
+            fim = inicio is not None
         elif linha.startswith("val ERRO"):
             raise ErroEntrada(f"a placa avisou: {linha}")
         elif linha.startswith("val seg"):
@@ -169,6 +174,17 @@ def ler_placa(caminho: Path) -> tuple[dict, list]:
                          "x": x, "escore": float(escore)})
     if inicio is None or not segs:
         raise ErroEntrada(f"{caminho} nao tem as linhas 'val inicio' e 'val seg' do validacao_placa")
+    if not fim:
+        raise ErroEntrada(f"{caminho} acaba antes do 'val FIM' ({len(segs)} segmentos recebidos): "
+                          "a captura foi cortada; espere o 'val FIM' antes de fechar o picocom")
+    try:
+        esperados = int(inicio["segmentos"])
+    except (KeyError, ValueError):
+        raise ErroEntrada(f"'val inicio' sem o numero de segmentos: {inicio}") from None
+    ids = [s["id"] for s in segs]
+    if len(segs) != esperados or len(set(ids)) != len(ids):
+        raise ErroEntrada(f"a placa anunciou {esperados} segmentos e mandou {len(segs)} "
+                          f"({len(set(ids))} distintos)")
     return inicio, segs
 
 
