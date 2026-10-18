@@ -89,13 +89,24 @@ static void confere_sentidos(void)
     pacote_decidir(&p, 1.0f, PACOTE_NOV_MAHAL_MFCC, 2.0f, 1.0f);
     CONFERE(p.disparou == 3u && p.falha, "LDA e novidade juntas: disparou = 3");
 
-    /* Na fronteira o texto perde o sinal: -0,0004 sai "0.000" com decisao N. A
-     * decisao vem do float da placa, nao do texto (o leitor em Python sabe disso). */
+    /* Fronteira: o sinal do texto segue a regra da LDA. -0,0004 e normal e sai
+     * "-0.000" (o texto_fixo() sozinho daria "0.000"); o -0.0f nao e negativo,
+     * entao e falha e sai "0.000". */
     p.n = 1u; p.origem = 'R'; p.clipe = 0; p.segmento = 5; p.ciclos = 0u;
     pacote_decidir(&p, -0.0004f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
     char buf[PACOTE_TAM_MAX];
     pacote_linha(buf, sizeof buf, &p);
-    CONFERE(strstr(buf, ",N,0,0.000,") != NULL, "fronteira: %s", buf);
+    CONFERE(strstr(buf, ",N,0,-0.000,") != NULL, "fronteira negativa: %s", buf);
+    pacote_decidir(&p, -0.0f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    pacote_linha(buf, sizeof buf, &p);
+    CONFERE(strstr(buf, ",F,1,0.000,") != NULL, "-0.0f e falha e sai sem sinal: %s", buf);
+    pacote_decidir(&p, 0.0004f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    pacote_linha(buf, sizeof buf, &p);
+    CONFERE(strstr(buf, ",F,1,0.000,") != NULL, "fronteira positiva: %s", buf);
+    /* O marco continua sem "-0.000" (o texto_fixo() nao mudou) */
+    char fmt[20];
+    marco_fmt_fixo(fmt, sizeof fmt, -0.0004f, 3);
+    CONFERE(strcmp(fmt, "0.000") == 0, "marco_fmt_fixo mudou: %s", fmt);
 }
 
 static void confere_pente(void)

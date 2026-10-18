@@ -14,7 +14,9 @@
  * Os campos, a ordem e os sentidos das comparacoes estao na secao "Pacote da
  * serial" do README e vem da decisao "O que o painel mostra no lugar de grau de
  * confianca" (Registro de Decisoes, 17/10):
- *   - LDA: falha se escore >= 0 (o mesmo lda_e_falha() do lda_modelo.h);
+ *   - LDA: falha se escore >= 0 (o mesmo lda_e_falha() do lda_modelo.h). Todo
+ *     escore negativo sai com '-', inclusive o que arredonda a zero ("-0.000"):
+ *     o sinal do texto e sempre o da decisao da LDA;
  *   - novidade: falha se pontuacao > limiar (estritamente maior, como no script);
  *   - pente (D1/D1b): vai a serie (BPFO ou BPFI) com a maior pontuacao - limiar.
  * A razao pontuacao / limiar e a consistencia entre segmentos NAO vao no pacote.

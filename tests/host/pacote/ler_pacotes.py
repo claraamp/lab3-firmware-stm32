@@ -12,10 +12,11 @@ Este script e a referencia de leitura para o painel de novembro:
    avisa que o firmware foi gravado com -DBLOCOS13=ON;
 3. confere em cada $CAB e $SEG: checksum, versao, numero e tipo dos campos;
 4. confere a coerencia da decisao com os sentidos da decisao de 17/10
-   (LDA: falha se escore >= 0; novidade: falha se pontuacao > limiar). A decisao
-   que vale e a do campo da placa: o texto tem 3 casas, e na fronteira (escore
-   arredondado a 0,000, ou pontuacao arredondada igual ao limiar) o script nao
-   recalcula a decisao a partir do texto;
+   (LDA: falha se escore >= 0; novidade: falha se pontuacao > limiar). Na LDA, o
+   sinal do texto e sempre o da decisao: todo escore negativo sai com '-',
+   inclusive "-0.000", entao a conferencia vale em qualquer escore. Na novidade
+   (campos reservados), o texto tem 3 casas, e quando a pontuacao e o limiar
+   arredondam para o mesmo valor o script nao recalcula a decisao: vale o campo;
 5. avisa pacotes perdidos (salto no contador n) e reinicios da placa (n volta a 0);
 6. mostra uma linha por segmento e um resumo; com --csv, grava os segmentos.
 
@@ -126,6 +127,7 @@ def ler_linha(linha: str):
     d["disparou"] = _int(d["disparou"], "disparou")
     if not 0 <= d["disparou"] <= 3:
         raise ErroPacote(f"disparou fora de 0..3: {d['disparou']}")
+    d["escore_txt"] = d["escore_lda"]
     d["escore_lda"] = _float(d["escore_lda"], "escore_lda")
     d["cod_novidade"] = _int(d["cod_novidade"], "cod_novidade")
     if d["cod_novidade"] not in NOVIDADE:
@@ -150,10 +152,15 @@ def conferir_decisao(d):
     if d["cod_novidade"] == 0 and disp & DISPAROU_NOVIDADE:
         raise ErroPacote("disparou novidade sem detector adotado")
 
-    e = d["escore_lda"]
-    if abs(e) > MEIA_UNIDADE:  # fora da fronteira, o sinal do texto e o da placa
-        if bool(disp & DISPAROU_LDA) != (e >= 0.0):
-            raise ErroPacote(f"escore {e} com o bit da LDA = {disp & DISPAROU_LDA} (falha se >= 0)")
+    # LDA pelo sinal do TEXTO: com '-' e normal (escore < 0), sem '-' e falha.
+    # Pelo float nao daria: float("-0.000") >= 0 e verdadeiro em Python.
+    txt = d["escore_txt"]
+    if txt.lower() == "nan":
+        raise ErroPacote("escore da LDA e nan")
+    lda_falha = not txt.startswith("-")
+    if bool(disp & DISPAROU_LDA) != lda_falha:
+        raise ErroPacote(f"escore {txt} com o bit da LDA = {disp & DISPAROU_LDA} "
+                         f"(falha se >= 0; negativo sai com '-')")
     if d["cod_novidade"] != 0:
         p, lim = d["pont_novidade"], d["lim_novidade"]
         if abs(p - lim) > 2 * MEIA_UNIDADE:
@@ -279,9 +286,10 @@ def autoteste():
     def assinar(corpo):
         return f"${corpo}*{checksum(corpo):02X}"
 
-    fronteira = [  # na fronteira, a decisao da placa vale qualquer que seja o texto
-        assinar("SEG,1,1,R,0,5,N,0,0.000,0,,,0"),
-        assinar("SEG,1,1,R,0,5,F,1,0.000,0,,,0"),
+    fronteira = [
+        assinar("SEG,1,1,R,0,5,N,0,-0.000,0,,,0"),   # -0,0004: normal, com '-'
+        assinar("SEG,1,1,R,0,5,F,1,0.000,0,,,0"),    # +0,0004 ou -0.0f: falha
+        # novidade: pontuacao e limiar iguais no texto; vale o campo
         assinar("SEG,1,1,C,0,5,N,0,-3.000,3,5.000,5.000,0"),
     ]
     ruins = {
@@ -290,6 +298,9 @@ def autoteste():
         "versao": assinar("SEG,2,7,R,2,1043,F,1,231.475,0,,,412"),
         "decisao x disparou": assinar("SEG,1,7,R,2,1043,N,1,231.475,0,,,412"),
         "sentido da LDA": assinar("SEG,1,7,R,2,1043,N,0,231.475,0,,,412"),
+        "zero sem sinal com N": assinar("SEG,1,1,R,0,5,N,0,0.000,0,,,0"),
+        "zero com sinal com F": assinar("SEG,1,1,R,0,5,F,1,-0.000,0,,,0"),
+        "escore nan": assinar("SEG,1,1,R,0,5,N,0,nan,0,,,0"),
         "sentido da novidade": assinar("SEG,1,7,C,0,1,N,0,-1400.000,3,812.250,61.500,412"),
         "novidade sem detector": assinar("SEG,1,7,R,2,1043,F,3,231.475,0,,,412"),
         "pontuacao com codigo 0": assinar("SEG,1,7,R,2,1043,F,1,231.475,0,1.000,2.000,412"),

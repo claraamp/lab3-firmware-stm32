@@ -80,9 +80,20 @@ static int fechar(char *buf, size_t n, int len)
 
 int pacote_linha(char *buf, size_t n, const pacote_segmento_t *p)
 {
-    char escore[20], pont[20] = "", lim[20] = "", clipe[16] = "";
+    char escore_buf[21], pont[20] = "", lim[20] = "", clipe[16] = "";
 
-    texto_fixo(escore, sizeof escore, p->escore_lda, CASAS);
+    /* O sinal do texto do escore segue sempre a regra da LDA: qualquer escore
+     * negativo (normal) sai com '-', inclusive os que arredondam a zero
+     * (-0,0004 -> "-0.000"). O texto_fixo() evita o "-0.000" de proposito, para
+     * o marco; aqui o '-' volta, para o painel poder ler a decisao da LDA pelo
+     * sinal do texto sem excecao na fronteira. O -0.0f nao e negativo
+     * (-0.0f < 0 e falso): sai "0.000", e e falha, como no lda_e_falha(). */
+    texto_fixo(escore_buf + 1, sizeof escore_buf - 1u, p->escore_lda, CASAS);
+    const char *escore = escore_buf + 1;
+    if (p->escore_lda < 0.0f && escore_buf[1] != '-') {
+        escore_buf[0] = '-';
+        escore = escore_buf;
+    }
     if (p->cod_novidade != PACOTE_NOV_NAO_ADOTADO) {
         texto_fixo(pont, sizeof pont, p->pont_novidade, CASAS);
         texto_fixo(lim, sizeof lim, p->lim_novidade, CASAS);
