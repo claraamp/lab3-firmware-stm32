@@ -359,9 +359,10 @@ Resultado em 18/10 (build Debug, com o `main` depois dos blocos 4 a 6):
 | clipes a 12,8 kHz (5 clipes de 2 s) | 256.215 | 0 |
 | recorte a 51,2 kHz (1 s, com as margens) | 103.284 | 0 |
 | cadeia (MFCC) | 1.276 | 10.788 |
-| decimação (buffers e `arm_fir_decimate_f32`) | 516 | 5.212 |
+| decimação (buffers; a `arm_fir_decimate_f32` está na linha da CMSIS-DSP) | 0 | 5.204 |
+| build de medida (`orcamento.c`; não vai para o firmware final) | 516 | 8 |
 | marco e LDA (com os vetores de teste do marco) | 36.502 | 2 |
-| CMSIS-DSP | 11.460 | 0 |
+| CMSIS-DSP (com a `arm_fir_decimate_f32` e o init dela, +284 B em relação ao build padrão) | 11.460 | 0 |
 | HAL e CubeMX | 6.025 | 13 |
 | aplicação base (inclui a FFT de teste da Frente 1) | 2.172 | 5.220 |
 | biblioteca C | 9.528 | 408 |
@@ -369,7 +370,7 @@ Resultado em 18/10 (build Debug, com o `main` depois dos blocos 4 a 6):
 | reserva de heap e pilha (linker script) | 0 | 1.540 |
 | **total** | **427.152** (81,5 %) | **23.216** (17,7 %) |
 
-- **Flash:** sobram 97.136 B (94,9 KiB). O áudio ocupa 359.499 B. O resto do firmware ocupa 67.653 B, um pouco acima da reserva de 64 KB do orçamento, mas 34.250 B disso são os vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`. Os 94,9 KiB livres equivalem a ~3,8 s a mais de áudio a 12,8 kHz, e são também o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado.
+- **Flash:** sobram 97.136 B (94,9 KiB). O áudio ocupa 359.499 B. O resto do firmware ocupa 67.653 B, um pouco acima da reserva de 64 KB do orçamento. Desse total, 516 B são o código do próprio build de medida, que não vai para o firmware final, e 34.250 B são os vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`. Os 94,9 KiB livres equivalem a ~3,8 s a mais de áudio a 12,8 kHz, e são também o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado.
 - **RAM:** sobram 107.856 B (105,3 KiB). Com os ~40 KB do detector de novidade, ainda sobrariam ~65 KiB. Dos 5.220 B da aplicação base, 3.072 B são os buffers da FFT de teste da Frente 1 (`fft_in` e `fft_mag` no `main.c`), que também podem sair do firmware final.
 - **Pilha:** a reserva do linker é só o mínimo (1.024 B), e o linker não avisa se a pilha real passar dela. A cadeia usa ~0,3 KB de pilha (medida pela Amanda com `-fstack-usage`), então cabe. A RAM livre é o espaço para onde a pilha pode crescer.
 

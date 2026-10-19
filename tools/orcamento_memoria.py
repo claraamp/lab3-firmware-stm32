@@ -39,7 +39,9 @@ SO_FLASH = {".isr_vector", ".text", ".rodata", ".ARM.extab", ".ARM", ".preinit_a
 FLASH_E_RAM = {".data"}
 SO_RAM = {".bss", "._user_heap_stack"}
 
-ORDEM = ["clipes a 12,8 kHz", "recorte a 51,2 kHz", "cadeia (MFCC)", "decimacao",
+ORDEM = ["clipes a 12,8 kHz", "recorte a 51,2 kHz", "cadeia (MFCC)",
+         "decimacao (buffers; a funcao esta na CMSIS-DSP)",
+         "build de medida (orcamento.c; nao vai para o firmware final)",
          "marco e LDA", "pacote da serial", "teste dos blocos 1 a 3", "CMSIS-DSP",
          "HAL e CubeMX", "aplicacao base", "biblioteca C", "alinhamento", "outros"]
 
@@ -51,7 +53,13 @@ def parte(arquivo: str, secao: str) -> str:
     if "mfcc_estagios.c" in a:
         return "cadeia (MFCC)"
     if "orcamento.c" in a:
-        return "decimacao"
+        # Os buffers da decimacao (decimador*) sao o que o firmware final vai
+        # ter; o resto do orcamento.c (o codigo que so toca em tudo e as duas
+        # variaveis volatile) existe so no build de medida. A arm_fir_decimate_f32
+        # e o init dela vem da libCMSISDSP.a e caem na linha da CMSIS-DSP.
+        if "decimador" in secao:
+            return "decimacao (buffers; a funcao esta na CMSIS-DSP)"
+        return "build de medida (orcamento.c; nao vai para o firmware final)"
     if "marco_lda.c" in a:
         return "marco e LDA"
     if "pacote_serial.c" in a or "texto_fixo.c" in a:
