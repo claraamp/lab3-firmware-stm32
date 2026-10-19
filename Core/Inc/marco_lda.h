@@ -16,6 +16,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "pacote_serial.h"
+
 typedef struct {
     float escore;       /* escore calculado na placa */
     float dif;          /* |escore - referencia| */
@@ -43,6 +45,7 @@ void marco_comparar(float escore, float ref, float tol, uint8_t falha_ref,
                     marco_resultado_t *r);
 
 /* Escreve v com `casas` casas decimais (o printf do nano.specs nao tem %f).
+ * Chama o texto_fixo() do texto_fixo.c, que o pacote da serial tambem usa.
  * Faixa: |v| * 10^casas < 4e9 (cabe em uint32_t); acima disso escreve "inf".
  * Com 6 casas, o limite e |v| < ~4000; com 3 casas, |v| < ~4e6. */
 int marco_fmt_fixo(char *buf, size_t n, float v, unsigned casas);
@@ -51,6 +54,12 @@ int marco_fmt_fixo(char *buf, size_t n, float v, unsigned casas);
 int marco_linha(char *buf, size_t n, const char *prefixo, uint16_t i,
                 const marco_resultado_t *r, uint32_t ciclos);
 
+/* Pacote da serial (formato v1, pacote_serial.h) do segmento i do marco:
+ * origem R, clipe = indice da gravacao, segmento = id do segmento no conjunto.
+ * Sem detector de novidade (codigo 0). */
+void marco_pacote(uint16_t i, const marco_resultado_t *r, uint32_t n, uint32_t ciclos,
+                  pacote_segmento_t *p);
+
 /* ---- com HAL (so na placa) ---------------------------------------------- */
 #ifndef MARCO_HOST
 /* Confere todos os segmentos e manda uma linha por segmento e o resumo.
@@ -58,7 +67,8 @@ int marco_linha(char *buf, size_t n, const char *prefixo, uint16_t i,
 int marco_lda_verificar(void);
 
 /* Um passo do laco principal: se a verificacao passou, mostra o proximo
- * segmento da demonstracao nos LEDs (2 s); senao, pisca os dois LEDs juntos. */
+ * segmento da demonstracao nos LEDs (2 s) e manda a linha demo e o pacote $SEG;
+ * senao, pisca os dois LEDs juntos. */
 void marco_lda_passo(int verificacao_ok);
 #endif
 
