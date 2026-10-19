@@ -6,13 +6,13 @@ Card "Validar cada bloco da cadeia em C contra a referência em Python" (2º par
 
 **No PC, todos os blocos ficam dentro das tolerâncias do A4 nos 295 segmentos da partição**, nos dois modos. A maior margem usada é 11,3% da tolerância (escore, modo encadeado). A cadeia em C, do `int16` ao escore da LDA, dá a **mesma decisão do Python nos 295 segmentos**. A maior diferença de escore contra o `escores_referencia.csv` é 0,0016, contra um menor |escore| de 1.297,2.
 
-**Na placa**, os blocos 1 a 3 (janela, espectro e Mel, com a FFT otimizada da CMSIS) ficam dentro do A4 nos 5 segmentos de referência: reanalisei a captura da placa do PR #3, com pior caso de 7,1%. O teste do segmento completo rodou na placa em 19/10 (Clara): 10/10 dentro do A4 e com as decisões do CSV, segundo o resultado relatado no PR #7. **Falta reanalisar a captura**: o anexo não abria (seção "Placa").
+**Na placa**, os blocos 1 a 3 (janela, espectro e Mel, com a FFT otimizada da CMSIS) ficam dentro do A4 nos 5 segmentos de referência: reanalisei a captura da placa do PR #3, com pior caso de 7,1%. O teste do segmento completo (blocos 1 a 6 e escore) rodou na placa em 19/10 (Clara) e a captura foi reanalisada: **10/10 dentro do A4**, com as decisões do CSV e pior caso de 5,8% (escore) (seção "Placa").
 
 | Item do card | Situação |
 |---|---|
 | A4 confirmado no contrato | Feito: `docs/contrato_numerico.md`, seção "Tolerâncias por estágio (A4)", com os valores em `dsp.ESTAGIOS_PORTE` |
 | Bloco a bloco no harness, com maior erro absoluto e relativo | Feito, nos 295 segmentos (tabelas abaixo) |
-| Mesmo teste na placa (FFT da CMSIS otimizada e segmento completo) | Blocos 1 a 3: captura da placa do PR #3 reanalisada, 15/15 OK. Segmento completo: rodou na placa, 10/10 OK relatado; **falta reanalisar a captura** |
+| Mesmo teste na placa (FFT da CMSIS otimizada e segmento completo) | Blocos 1 a 3: captura da placa do PR #3 reanalisada, 15/15 OK. Segmento completo: captura da placa de 19/10 reanalisada, 10/10 OK |
 | Escore final contra o `escores_referencia.csv` | Feito: 295/295 decisões iguais, diferença máxima 0,0016 |
 | Decimação (bloco 0) | Não entrou: ainda não há decimação no firmware |
 | Tabela de erros no repositório | Este arquivo |
@@ -127,14 +127,25 @@ cmake --preset Debug -DVALIDACAO_PLACA=OFF   # antes de gravar o firmware normal
 
 Com o teste ligado, o firmware Debug ocupa 322.912 B de flash (62%; 256 KB são os clipes) e 18.384 B de RAM. Se o `BLOCOS13` também estiver ligado, o CMake avisa: os dois testes rodariam no boot.
 
-**Resultado na placa (19/10, relatado pela Clara no PR #7, não reanalisado):** `VALIDACAO OK`, 10/10.
+**Resultado na placa (19/10).** A Clara rodou o teste e anexou a captura (`validacao_placa.txt`) ao PR #7. Reanalisei com o `gerar_refs_clipes.py` e o `validar_blocos.py --placa` (e também com as referências dos 295 segmentos do `08`): `VALIDACAO OK`, 10/10, com a mesma tabela que ela gerou.
+
+| Segmento | Média (abs) | Desvio (rel) | Escore (rel) | Escore − CSV | Decisão | Ciclos | Situação |
+|---|---:|---:|---:|---:|---|---:|---|
+| normal_seg0029 | 8,7 × 10⁻⁷ | 1,9 × 10⁻⁷ | 7,2 × 10⁻⁸ | 0,0001 | igual | 6145316 | OK |
+| normal_seg0030 | 8,5 × 10⁻⁷ | 3,5 × 10⁻⁷ | 1,4 × 10⁻⁷ | 0,0002 | igual | 6145233 | OK |
+| bpfi_0.3mm_seg0088 | 2,1 × 10⁻⁶ | 3,3 × 10⁻⁷ | 2,6 × 10⁻⁷ | 0,0004 | igual | 6145705 | OK |
+| bpfi_0.3mm_seg0089 | 1,1 × 10⁻⁶ | 3,4 × 10⁻⁷ | 7,0 × 10⁻⁸ | 0,0001 | igual | 6146307 | OK |
+| bpfi_1.0mm_seg0147 | 1,9 × 10⁻⁶ | 3,6 × 10⁻⁷ | 4,6 × 10⁻⁸ | 0,0001 | igual | 6147372 | OK |
+| bpfi_1.0mm_seg0148 | 2,4 × 10⁻⁶ | 3,0 × 10⁻⁷ | 5,8 × 10⁻⁷ | 0,0008 | igual | 6147146 | OK |
+| bpfo_0.3mm_seg0206 | 4,0 × 10⁻⁷ | 1,9 × 10⁻⁷ | 9,5 × 10⁻⁸ | 0,0001 | igual | 6144411 | OK |
+| bpfo_0.3mm_seg0207 | 7,6 × 10⁻⁷ | 2,1 × 10⁻⁷ | 2,2 × 10⁻⁷ | 0,0003 | igual | 6144298 | OK |
+| bpfo_1.0mm_seg0265 | 1,5 × 10⁻⁶ | 3,3 × 10⁻⁷ | 1,6 × 10⁻⁸ | 0,0000 | igual | 6145383 | OK |
+| bpfo_1.0mm_seg0266 | 1,0 × 10⁻⁶ | 5,4 × 10⁻⁷ | 3,0 × 10⁻⁸ | 0,0000 | igual | 6145305 | OK |
 
 - **Erros:** os maiores valores ficam em 2,4% (média), 1,1% (desvio) e 5,8% (escore, `bpfi_1.0mm_seg0148`) da tolerância encadeada.
 - **Decisões:** iguais às do CSV nos 10 segmentos; a maior diferença de escore é 0,0008.
-- **A placa não repete o PC bit a bit:** só 95 das 260 características e 4 dos 10 escores saem iguais aos do emulador.
-- **Tempo:** cada segmento de 1 s leva 6,145 M ciclos (61,5 ms a 100 MHz), com variação de 0,05% entre segmentos. A estimativa anterior era de ~55 ms; o tempo medido para os blocos 1 a 3 é 55,1 ms, e os blocos 4 a 6 somam cerca de 6,4 ms.
-
-O arquivo anexado ao PR (`validacao_placa.txt`) dava 404 em 19/10. Quando ele abrir, a tabela do `--md` entra aqui no lugar deste resumo.
+- **A placa não repete o PC bit a bit:** só 95 das 260 características e 4 dos 10 escores saem iguais aos do emulador. O teste passou de fato pela CMSIS otimizada e pela FMA do Cortex-M4.
+- **Tempo:** cada segmento de 1 s leva 6,145 M ciclos (61,5 ms a 100 MHz), com variação de 0,05% entre segmentos. Os blocos 1 a 3 levam 55,1 ms, e os blocos 4 a 6 somam cerca de 6,4 ms.
 
 ## Decimação (bloco 0)
 
