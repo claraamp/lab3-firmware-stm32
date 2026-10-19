@@ -29,6 +29,9 @@
 #ifdef FIRMWARE_BLOCOS13
 #include "blocos13.h"
 #endif
+#ifdef FIRMWARE_ORCAMENTO
+#include "orcamento.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -158,6 +161,13 @@ int main(void)
    * DWT e a saida de cada bloco pela serial, para o receber_blocos13.py. Cerca de
    * 100 s a 115200 baud; o marco vem depois. */
   blocos13_executar();
+#endif
+
+#ifdef FIRMWARE_ORCAMENTO
+  /* Build de medida (-DORCAMENTO=ON): poe no link a cadeia, os clipes, o recorte
+   * e os buffers da decimacao, sem executar nada, para medir pelo .map
+   * (tools/orcamento_memoria.py). Ver orcamento.h. */
+  orcamento_referenciar();
 #endif
 
   /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */
