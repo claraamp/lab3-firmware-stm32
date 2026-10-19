@@ -84,7 +84,23 @@ add_executable(emular_blocos13
     ${RAIZ}/Core/Src/clipes_demo.c
 )
 target_compile_definitions(emular_blocos13 PRIVATE BLOCOS13_HOST)
-foreach(alvo test_mel_bordas test_log_dct emular_blocos13)
+
+# Validacao bloco a bloco (tests/host/validacao/): o exportador grava a saida de
+# cada estagio do C, sem comparar (a comparacao e do validar_blocos.py, com o
+# dsp.erro_estagio do Python), e o emulador gera a saida do teste do segmento
+# completo na placa (Core/Src/validacao_placa.c) sem a placa.
+add_executable(exportar_saidas_c
+    ${RAIZ}/tests/host/validacao/exportar_saidas_c.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+)
+add_executable(emular_validacao_placa
+    ${RAIZ}/tests/host/validacao/emular_validacao_placa.c
+    ${RAIZ}/Core/Src/validacao_placa.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
+)
+target_compile_definitions(emular_validacao_placa PRIVATE VALIDACAO_HOST)
+foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

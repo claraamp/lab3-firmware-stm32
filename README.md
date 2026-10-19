@@ -95,6 +95,7 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              mfcc_estagios.c/.h, os estágios da extração de características
                              portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
                              placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C;
+                             validacao_placa.c/.h, o teste do segmento completo na placa;
                              pacote_serial.c/.h, o formato do pacote da serial;
                              texto_fixo.c/.h, float em texto sem o %f)
 tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL e
@@ -102,6 +103,8 @@ tests/host/                  testes no PC da parte do marco e do pacote que não
 tests/host/pacote/           leitor dos pacotes da serial (referência para o painel)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
+tests/host/validacao/        validação independente bloco a bloco (exportador do C e comparador em Python)
+docs/validacao-blocos.md     tabela de erros por bloco (PC, 295 segmentos) e o teste na placa
 tools/                       orcamento_memoria.py: flash e RAM por parte, lidas do .map
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
@@ -406,6 +409,10 @@ python3 tests/host/pacote/ler_pacotes.py --porta /dev/ttyUSB0 --segundos 30 --sa
 ```
 
 Aperte o RESET da placa logo depois, para pegar também o `$CAB`. Com `--csv arquivo.csv`, os segmentos são gravados em CSV. Feche o picocom antes: só um programa abre a serial por vez.
+
+## Validação bloco a bloco
+
+A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
 
 ## Medições
 

@@ -106,6 +106,24 @@ if(BLOCOS13)
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_BLOCOS13)
 endif()
 
+# Validacao do segmento completo na placa (Core/Src/validacao_placa.c): ao ligar,
+# roda o mfcc_segmento() e o lda_escore() nos 10 segmentos dos clipes e manda as 26
+# caracteristicas e o escore pela serial, para o validar_blocos.py --placa comparar
+# com o Python. Leva menos de 1 s, mas fica DESLIGADO por padrao, como o BLOCOS13:
+# cmake --preset Debug -DVALIDACAO_PLACA=ON
+option(VALIDACAO_PLACA "Validacao do segmento completo na placa ao ligar" OFF)
+if(VALIDACAO_PLACA)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/validacao_placa.c)
+    set_source_files_properties(Core/Src/validacao_placa.c PROPERTIES COMPILE_OPTIONS "-O2")
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_VALIDACAO_PLACA)
+    if(BLOCOS13)
+        # os dois testes rodam no boot; o binario do blocos13 sai antes e o
+        # validar_blocos.py nao acha a validacao no meio dele
+        message(WARNING "VALIDACAO_PLACA e BLOCOS13 ligados juntos (BLOCOS13 pode ter "
+                        "ficado no cache): para a validacao, use -DBLOCOS13=OFF")
+    endif()
+endif()
+
 # Build de medida do orcamento de flash e RAM (Core/Src/orcamento.c): poe no link
 # tudo o que o firmware final vai ter e que hoje o --gc-sections descarta (cadeia
 # completa, LDA, os 5 clipes, o recorte de 51,2 kHz e os buffers da decimacao),
