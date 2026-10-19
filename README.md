@@ -30,7 +30,7 @@ Ao ligar, a placa:
    ```
 
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
-4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` do segmento na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote são os do `lda_escore()`, medidos pelo DWT. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O LED da placa (PC13) fica aceso depois da conferência.
+4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` do segmento na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote são os do `lda_escore()`, medidos pelo DWT. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
 
 ### Cabeçalhos do modelo
 
@@ -366,7 +366,7 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 | 4 | clipe | inteiro ou vazio | `R`: índice da gravação (`vt_gravacao`); `C`: índice do clipe; `A`: vazio |
 | 5 | segmento | inteiro | `R`: id do segmento no conjunto (`vt_segmento`); `C`: segmento dentro do clipe |
 | 6 | decisão | `N`, `F` | normal ou falha (LDA **ou** novidade) |
-| 7 | disparou | `0`–`3` | máscara: 0 = nenhum, 1 = LDA, 2 = novidade, 3 = ambos |
+| 7 | disparou | `0`–`3` ou `4` | máscara: 0 = nenhum, 1 = LDA, 2 = novidade, 3 = ambos; **4 = erro**, sempre sozinho (ver "Erro" abaixo) |
 | 8 | escore da LDA | 3 casas | valor cru, **falha se ≥ 0**. Não é confiança e nunca vai em % |
 | 9 | código de novidade | `0`–`4` | 0 = não adotado (também no D4); 1 = pente, série BPFO; 2 = pente, série BPFI; 3 = D2 (Mahalanobis² no MFCC); 4 = D3 (Mahalanobis² no MFCC + pente) |
 | 10 | pontuação de novidade | 3 casas ou vazio | vazio com código 0. Em dB no pente, Mahalanobis² no D2/D3 |
@@ -375,13 +375,15 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 
 **Sentidos das comparações.** A LDA dá falha com escore **≥ 0** e o detector de novidade com pontuação **> limiar**, os mesmos sentidos do Python. A placa decide pelo `float`. **No escore da LDA, o sinal do texto é sempre o da decisão:** todo escore negativo sai com `-`, inclusive o que arredonda a zero (−0,0004 sai `-0.000`, decisão `N`). O `-0.0f` não é negativo (`-0.0f < 0` é falso), então sai `0.000` e é falha, como no `lda_e_falha()`. Assim, o painel pode ler a decisão da LDA pelo sinal do texto, sem exceção na fronteira; em Python, use o sinal da string, porque `float("-0.000") >= 0` é verdadeiro. O formatador do marco (`texto_fixo()`) continua sem `-0.000`; o `-` é posto só no `pacote_linha()`. Na novidade (campos reservados), quando a pontuação e o limiar arredondam para o mesmo valor, vale o campo de decisão.
 
+**Erro (disparou = 4).** Se o escore da LDA, ou a pontuação ou o limiar de novidade com detector adotado, não for finito (NaN ou infinito), o pacote sai com `disparou = 4`, sozinho, e decisão `F`, e a placa pisca os dois LEDs juntos em vez de acender um deles. Num detector de falha, uma conta que deu errado não pode aparecer como "normal": `NaN >= 0` é falso, e sem esse bit um escore NaN sairia `N` com o LED verde. O texto do valor mostra o problema (`nan`, `inf` ou `-inf`). Hoje a cadeia não gera NaN com entrada válida (o log tem o épsilon e o Welford divide por n ≥ 1); o caso provável é futuro, a pontuação do pente com fundo zero (infinito menos infinito). Um `inf` **sem** o bit de erro também pode aparecer: é um valor finito grande demais para o texto (≥ ~4 × 10⁶ com 3 casas), e o sinal dele continua valendo. O painel mostra "erro" para o 4.
+
 **Pente (D1/D1b), que tem duas séries.** Vai a série com a maior diferença pontuação − limiar (em dB), e o código diz qual (1 ou 2). Em empate, vai a BPFO. O painel mostra a pontuação e o limiar, não a diferença.
 
 **O que não vai no pacote:** a razão pontuação ÷ limiar (seria lida como força da detecção) e a consistência entre segmentos ("k de N segmentos recentes indicaram falha"), que o painel calcula a partir da sequência de `$SEG`.
 
 **Os campos de novidade estão reservados, não prometidos.** Enquanto nenhum detector for adotado, o código é 0, e a pontuação e o limiar vão vazios. Adotar um detector não muda o formato; mudar o formato exige subir a versão (`PACOTE_VERSAO`).
 
-**Limites.** Com 3 casas, cada número vai até cerca de ±4 × 10⁶; acima disso, sai `inf` (`texto_fixo.h`). O escore da LDA fica em ±1.600. O id do modelo não pode ter vírgula nem `*`. A maior linha possível cabe em `PACOTE_TAM_MAX` (128 B).
+**Limites.** Com 3 casas, cada número vai até cerca de ±4 × 10⁶; acima disso, sai `inf` (`texto_fixo.h`). Esse limite é o de caber em `uint32_t`, não o de precisão: o `float` tem ~7 dígitos significativos, então acima de ~10.000 a terceira casa já não é confiável. O escore da LDA fica em ±1.600. O id do modelo não pode ter vírgula nem `*`. A maior linha possível cabe em `PACOTE_TAM_MAX` (128 B).
 
 ### Testar no PC
 

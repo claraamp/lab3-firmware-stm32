@@ -103,6 +103,31 @@ static void confere_sentidos(void)
     pacote_decidir(&p, 0.0004f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
     pacote_linha(buf, sizeof buf, &p);
     CONFERE(strstr(buf, ",F,1,0.000,") != NULL, "fronteira positiva: %s", buf);
+    /* Valor nao finito: erro (4) sozinho e falha, nunca normal. NaN >= 0 e
+     * falso; sem o erro, o NaN sairia N e acenderia o LED verde. */
+    const float nan_f = nanf("");
+    pacote_decidir(&p, nan_f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    pacote_linha(buf, sizeof buf, &p);
+    CONFERE(p.falha && p.disparou == PACOTE_ERRO && strstr(buf, ",F,4,nan,") != NULL,
+            "escore NaN tem que ser erro: %s", buf);
+    pacote_decidir(&p, -INFINITY, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    pacote_linha(buf, sizeof buf, &p);
+    CONFERE(p.falha && p.disparou == PACOTE_ERRO && strstr(buf, ",F,4,-inf,") != NULL,
+            "escore -inf tem que ser erro: %s", buf);
+    pacote_decidir(&p, INFINITY, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    CONFERE(p.falha && p.disparou == PACOTE_ERRO, "escore +inf tem que ser erro");
+    pacote_decidir(&p, -1400.0f, PACOTE_NOV_MAHAL_MFCC, nan_f, 61.5f);
+    pacote_linha(buf, sizeof buf, &p);
+    CONFERE(p.falha && p.disparou == PACOTE_ERRO && strstr(buf, ",F,4,-1400.000,3,nan,61.500,") != NULL,
+            "pontuacao NaN tem que ser erro: %s", buf);
+    pacote_decidir(&p, -1400.0f, PACOTE_NOV_PENTE_BPFO, INFINITY - INFINITY, 3.0f);
+    CONFERE(p.disparou == PACOTE_ERRO, "pente com inf - inf tem que ser erro");
+    pacote_decidir(&p, -1400.0f, PACOTE_NOV_MAHAL_MFCC, 2.0f, INFINITY);
+    CONFERE(p.disparou == PACOTE_ERRO, "limiar infinito tem que ser erro");
+    /* Sem detector adotado, pontuacao e limiar nao entram (vao vazios) */
+    pacote_decidir(&p, -1400.0f, PACOTE_NOV_NAO_ADOTADO, nan_f, nan_f);
+    CONFERE(p.disparou == 0u && !p.falha, "novidade nao adotada nao pode gerar erro");
+
     /* O marco continua sem "-0.000" (o texto_fixo() nao mudou) */
     char fmt[20];
     marco_fmt_fixo(fmt, sizeof fmt, -0.0004f, 3);

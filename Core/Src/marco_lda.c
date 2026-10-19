@@ -109,16 +109,20 @@ int marco_linha(char *buf, size_t n, const char *prefixo, uint16_t i,
 #include "main.h"
 #include "usart.h"
 
-static void tx(const char *s, int len)
+/* Manda len bytes de s, so se couberem no buffer de tam bytes. O snprintf
+ * devolve o tamanho que a linha TERIA: se ela foi cortada, len >= tam, e mandar
+ * len bytes leria alem do buffer. Nesse caso nao manda nada. */
+static void tx(const char *s, int len, size_t tam)
 {
-    if (len > 0) {
+    if (len > 0 && (size_t)len < tam) {
         HAL_UART_Transmit(&huart1, (uint8_t *)s, (uint16_t)len, HAL_MAX_DELAY);
     }
 }
 
 static void tx_str(const char *s)
 {
-    tx(s, (int)strlen(s));
+    const size_t n = strlen(s);
+    tx(s, (int)n, n + 1u);
 }
 
 static void leds(int verde, int vermelho)
@@ -178,13 +182,13 @@ int marco_lda_verificar(void)
                    "marco13 modelo=%s json=%s n_features=%d segmentos=%u clock=%luMHz\r\n",
                    VT_MODELO_ID, VT_JSON_SHA256_12, LDA_N_FEATURES, (unsigned)VT_N_SEGMENTOS,
                    (unsigned long)(SystemCoreClock / 1000000u));
-    tx(linha, len);
+    tx(linha, len, sizeof linha);
 
     if (!marco_cabecalhos_coerentes()) {
         len = snprintf(linha, sizeof linha,
                        "ERRO: lda_modelo.h e lda_vetores_teste.h sao de modelos diferentes "
                        "(bias diferente); gere os dois do mesmo lda_final.json\r\n");
-        tx(linha, len);
+        tx(linha, len, sizeof linha);
         return 0;
     }
 
@@ -192,7 +196,8 @@ int marco_lda_verificar(void)
      * os $SEG da demonstracao. */
     tx(linha, pacote_cabecalho(linha, sizeof linha, VT_MODELO_ID, VT_JSON_SHA256_12,
                                (unsigned)LDA_N_FEATURES,
-                               (unsigned)(SystemCoreClock / 1000000u)));
+                               (unsigned)(SystemCoreClock / 1000000u)),
+       sizeof linha);
 
     dwt_ligar();
     const uint32_t a = DWT->CYCCNT;
@@ -219,7 +224,7 @@ int marco_lda_verificar(void)
         }
         const float razao = r.dif / vt_tolerancia[i];
         razao_max = razao > razao_max ? razao : razao_max;
-        tx(linha, marco_linha(linha, sizeof linha, "seg", i, &r, c));
+        tx(linha, marco_linha(linha, sizeof linha, "seg", i, &r, c), sizeof linha);
     }
 
     char s_dif[20], s_razao[20];
@@ -235,7 +240,7 @@ int marco_lda_verificar(void)
                    s_dif, (unsigned)seg_dif_max, s_razao,
                    (unsigned long)c_min, (unsigned long)c_med, (unsigned long)c_max,
                    (unsigned long)(us / 100u), (unsigned long)(us % 100u));
-    tx(linha, len);
+    tx(linha, len, sizeof linha);
 
     const int ok = (n_ok == VT_N_SEGMENTOS);
     tx_str(ok ? "MARCO OK\r\n" : "MARCO FALHOU\r\n");
@@ -262,10 +267,19 @@ void marco_lda_passo(int verificacao_ok)
     const uint32_t ciclos = avaliar_medindo(i, &r, custo_leitura_dwt);
     pacote_segmento_t p;
     marco_pacote(i, &r, n_pacotes++, ciclos, &p);
-    leds(!p.falha, p.falha);
-    tx(linha, marco_linha(linha, sizeof linha, "demo", i, &r, ciclos));
-    tx(linha, pacote_linha(linha, sizeof linha, &p));
-    HAL_Delay(2000);
+    tx(linha, marco_linha(linha, sizeof linha, "demo", i, &r, ciclos), sizeof linha);
+    tx(linha, pacote_linha(linha, sizeof linha, &p), sizeof linha);
+    if (p.disparou & PACOTE_ERRO) {
+        /* escore nao finito: o padrao de erro (os dois LEDs juntos, rapido),
+         * nunca o verde de "normal". Dura os mesmos 2 s de uma decisao. */
+        for (int j = 0; j < 16; ++j) {
+            leds(j & 1, j & 1);
+            HAL_Delay(125);
+        }
+    } else {
+        leds(!p.falha, p.falha);
+        HAL_Delay(2000);
+    }
     leds(0, 0);
     HAL_Delay(300);
     k = (uint16_t)((k + 1u) % VT_N_DEMO);

@@ -55,7 +55,7 @@ CAMPOS_CAB = ("versao", "modelo", "json_sha12", "n_features", "clock_mhz")
 ORIGENS = {"R": "referencia", "C": "clipe", "A": "ao vivo"}
 NOVIDADE = {0: "nao adotado", 1: "pente BPFO (dB)", 2: "pente BPFI (dB)",
             3: "Mahalanobis2 MFCC", 4: "Mahalanobis2 MFCC+pente"}
-DISPAROU_LDA, DISPAROU_NOVIDADE = 1, 2
+DISPAROU_LDA, DISPAROU_NOVIDADE, ERRO = 1, 2, 4
 
 
 class ErroPacote(Exception):
@@ -125,8 +125,8 @@ def ler_linha(linha: str):
     if d["decisao"] not in ("N", "F"):
         raise ErroPacote(f"decisao tem que ser N ou F: {d['decisao']!r}")
     d["disparou"] = _int(d["disparou"], "disparou")
-    if not 0 <= d["disparou"] <= 3:
-        raise ErroPacote(f"disparou fora de 0..3: {d['disparou']}")
+    if d["disparou"] not in (0, 1, 2, 3, ERRO):
+        raise ErroPacote(f"disparou tem que ser 0..3 ou 4 (erro, sozinho): {d['disparou']}")
     d["escore_txt"] = d["escore_lda"]
     d["escore_lda"] = _float(d["escore_lda"], "escore_lda")
     d["cod_novidade"] = _int(d["cod_novidade"], "cod_novidade")
@@ -136,7 +136,9 @@ def ler_linha(linha: str):
         if d["pont_novidade"] != "" or d["lim_novidade"] != "":
             raise ErroPacote("novidade nao adotada (codigo 0) com pontuacao ou limiar")
         d["pont_novidade"] = d["lim_novidade"] = None
+        d["nov_txt"] = []
     else:
+        d["nov_txt"] = [d["pont_novidade"], d["lim_novidade"]]
         d["pont_novidade"] = _float(d["pont_novidade"], "pont_novidade")
         d["lim_novidade"] = _float(d["lim_novidade"], "lim_novidade")
     d["ciclos"] = _int(d["ciclos"], "ciclos")
@@ -152,11 +154,21 @@ def conferir_decisao(d):
     if d["cod_novidade"] == 0 and disp & DISPAROU_NOVIDADE:
         raise ErroPacote("disparou novidade sem detector adotado")
 
+    # Erro (4): algum valor usado nao e finito. O texto tem que mostrar isso
+    # (nan, inf ou -inf); fora do erro, nan nao pode aparecer. "inf" sem o bit de
+    # erro pode aparecer: e um valor finito grande demais para o texto
+    # (|v| >= ~4e6 com 3 casas, texto_fixo.h), e o sinal dele ainda vale.
+    txt = d["escore_txt"]
+    textos = [txt] + d["nov_txt"]
+    if disp == ERRO:
+        if not any(t.lower() in ("nan", "inf", "-inf") for t in textos):
+            raise ErroPacote("bit de erro (4) sem nenhum valor nan ou inf")
+        return
+    if any(t.lower() == "nan" for t in textos):
+        raise ErroPacote("valor nan sem o bit de erro (4)")
+
     # LDA pelo sinal do TEXTO: com '-' e normal (escore < 0), sem '-' e falha.
     # Pelo float nao daria: float("-0.000") >= 0 e verdadeiro em Python.
-    txt = d["escore_txt"]
-    if txt.lower() == "nan":
-        raise ErroPacote("escore da LDA e nan")
     lda_falha = not txt.startswith("-")
     if bool(disp & DISPAROU_LDA) != lda_falha:
         raise ErroPacote(f"escore {txt} com o bit da LDA = {disp & DISPAROU_LDA} "
@@ -170,7 +182,7 @@ def conferir_decisao(d):
 
 
 def disparou_txt(disp):
-    return {0: "nenhum", 1: "LDA", 2: "novidade", 3: "ambos"}[disp]
+    return {0: "nenhum", 1: "LDA", 2: "novidade", 3: "ambos", 4: "ERRO"}[disp]
 
 
 # --------------------------------------------------------------------------- #
@@ -291,6 +303,12 @@ def autoteste():
         assinar("SEG,1,1,R,0,5,F,1,0.000,0,,,0"),    # +0,0004 ou -0.0f: falha
         # novidade: pontuacao e limiar iguais no texto; vale o campo
         assinar("SEG,1,1,C,0,5,N,0,-3.000,3,5.000,5.000,0"),
+        # erro (4): valor nao finito, decisao F (as mesmas linhas do teste em C)
+        assinar("SEG,1,1,R,0,5,F,4,nan,0,,,0"),
+        assinar("SEG,1,1,R,0,5,F,4,-inf,0,,,0"),
+        assinar("SEG,1,1,C,0,5,F,4,-1400.000,3,nan,61.500,0"),
+        # finito grande demais para o texto: "inf" sem erro, o sinal vale
+        assinar("SEG,1,1,R,0,5,F,1,inf,0,,,0"),
     ]
     ruins = {
         "checksum": "$SEG,1,7,R,2,1043,F,1,231.475,0,,,412*68",
@@ -300,7 +318,12 @@ def autoteste():
         "sentido da LDA": assinar("SEG,1,7,R,2,1043,N,0,231.475,0,,,412"),
         "zero sem sinal com N": assinar("SEG,1,1,R,0,5,N,0,0.000,0,,,0"),
         "zero com sinal com F": assinar("SEG,1,1,R,0,5,F,1,-0.000,0,,,0"),
-        "escore nan": assinar("SEG,1,1,R,0,5,N,0,nan,0,,,0"),
+        "escore nan sem erro": assinar("SEG,1,1,R,0,5,N,0,nan,0,,,0"),
+        "escore nan com F sem erro": assinar("SEG,1,1,R,0,5,F,1,nan,0,,,0"),
+        "erro com N": assinar("SEG,1,1,R,0,5,N,4,nan,0,,,0"),
+        "erro junto com LDA": assinar("SEG,1,1,R,0,5,F,5,nan,0,,,0"),
+        "erro sem valor nao finito": assinar("SEG,1,1,R,0,5,F,4,231.475,0,,,0"),
+        "pontuacao nan sem erro": assinar("SEG,1,1,C,0,5,F,1,1.000,3,nan,5.000,0"),
         "sentido da novidade": assinar("SEG,1,7,C,0,1,N,0,-1400.000,3,812.250,61.500,412"),
         "novidade sem detector": assinar("SEG,1,7,R,2,1043,F,3,231.475,0,,,412"),
         "pontuacao com codigo 0": assinar("SEG,1,7,R,2,1043,F,1,231.475,0,1.000,2.000,412"),

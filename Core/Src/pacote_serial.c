@@ -5,6 +5,7 @@
 
 #include "pacote_serial.h"
 
+#include <math.h>
 #include <stdio.h>
 
 #include "texto_fixo.h"
@@ -30,6 +31,21 @@ void pacote_decidir(pacote_segmento_t *p, float escore_lda, uint8_t cod_novidade
     p->cod_novidade = cod_novidade;
     p->pont_novidade = pont_novidade;
     p->lim_novidade = lim_novidade;
+
+    /* Valor nao finito (NaN ou infinito): erro, nunca "normal". O NaN passaria
+     * como normal (NaN >= 0 e falso) e acenderia o LED verde. Hoje a cadeia nao
+     * gera NaN com entrada valida (o log tem o epsilon, o Welford divide por
+     * n >= 1); o caso provavel e futuro: a pontuacao do pente com fundo zero
+     * (infinito menos infinito). */
+    const int nao_finito =
+        !isfinite(escore_lda) ||
+        (cod_novidade != PACOTE_NOV_NAO_ADOTADO && (!isfinite(pont_novidade) ||
+                                                    !isfinite(lim_novidade)));
+    if (nao_finito) {
+        p->disparou = PACOTE_ERRO;
+        p->falha = 1u;
+        return;
+    }
 
     p->disparou = 0u;
     if (pacote_lda_e_falha(escore_lda)) {

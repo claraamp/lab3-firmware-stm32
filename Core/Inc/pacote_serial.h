@@ -47,10 +47,17 @@ typedef enum {
     PACOTE_ORIGEM_AO_VIVO = 'A',    /* microfone; reservado, ainda nao existe */
 } pacote_origem_t;
 
-/* Qual detector disparou: mascara de bits (0 = nenhum, 3 = ambos). */
+/* Qual detector disparou: mascara de bits (0 = nenhum, 3 = ambos).
+ * PACOTE_ERRO (4) aparece SOZINHO: o escore da LDA, ou a pontuacao ou o limiar
+ * de novidade (com detector adotado), nao e finito (NaN ou infinito). Nesse caso
+ * nao da para dizer qual detector disparou; a decisao sai falha (F), a placa
+ * pisca os dois LEDs e o painel mostra "erro", nunca "normal". Um detector de
+ * falha nao pode mostrar "normal" quando a conta deu errado: NaN >= 0 e falso,
+ * e sem este bit um escore NaN sairia como normal. */
 enum {
     PACOTE_DISPAROU_LDA = 1u,
     PACOTE_DISPAROU_NOVIDADE = 2u,
+    PACOTE_ERRO = 4u,
 };
 
 /* Detector de novidade cuja pontuacao vai no pacote. 0 = nao adotado (tambem no
@@ -84,7 +91,8 @@ int pacote_lda_e_falha(float escore);                     /* escore >= 0 */
 int pacote_novidade_dispara(float pontuacao, float limiar); /* pontuacao > limiar */
 
 /* Preenche escore, codigo, pontuacao, limiar, disparou e falha. A decisao e
- * "LDA OU novidade"; com cod_novidade == 0 so a LDA conta. */
+ * "LDA OU novidade"; com cod_novidade == 0 so a LDA conta. Se algum valor usado
+ * nao for finito, disparou = PACOTE_ERRO e falha = 1 (ver acima). */
 void pacote_decidir(pacote_segmento_t *p, float escore_lda, uint8_t cod_novidade,
                     float pont_novidade, float lim_novidade);
 
