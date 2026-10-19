@@ -125,7 +125,7 @@ python3 tests/host/validacao/validar_blocos.py --refs build/refs_clipes \
 cmake --preset Debug -DVALIDACAO_PLACA=OFF   # antes de gravar o firmware normal
 ```
 
-Com o teste ligado, o firmware Debug ocupa 322.912 B de flash (62%; 256 KB são os clipes) e 18.384 B de RAM. Se o `BLOCOS13` também estiver ligado, o CMake avisa: os dois testes rodariam no boot.
+Com o teste ligado, o firmware Debug ocupa 324.272 B de flash (62%; 256 KB são os clipes) e 18.392 B de RAM, já com o pacote da serial do PR #5. A flash varia ~1,5 KB entre versões da toolchain. Se o `BLOCOS13` também estiver ligado, o CMake avisa: os dois testes rodariam no boot.
 
 **Resultado na placa (19/10).** A Clara rodou o teste e anexou a captura (`validacao_placa.txt`) ao PR #7. Reanalisei com o `gerar_refs_clipes.py` e o `validar_blocos.py --placa` (e também com as referências dos 295 segmentos do `08`): `VALIDACAO OK`, 10/10, com a mesma tabela que ela gerou.
 
