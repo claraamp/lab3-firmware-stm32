@@ -3,7 +3,8 @@
  * formatacao da serial). Nao precisa da placa:
  *
  *   gcc -std=c11 -O2 -Wall -Wextra -Werror -Wdouble-promotion -DMARCO_HOST \
- *       -ICore/Inc tests/host/test_marco_lda.c Core/Src/marco_lda.c -lm -o build/test_marco_lda
+ *       -ICore/Inc tests/host/test_marco_lda.c Core/Src/marco_lda.c Core/Src/texto_fixo.c \
+ *       Core/Src/pacote_serial.c -lm -o build/test_marco_lda
  *   ./build/test_marco_lda
  *
  * No PC o gcc nao funde multiplicacao e soma (no Cortex-M4 funde, vfma.f32); os

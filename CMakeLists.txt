@@ -80,6 +80,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     Core/Src/marco_lda.c
     Core/Src/mfcc_estagios.c
+    # pacote da serial (formato v1) e o formatador de ponto fixo que ele e o marco usam
+    Core/Src/pacote_serial.c
+    Core/Src/texto_fixo.c
     # clipes de audio da Frente 3C (clipes_demo.h, gerado no repositorio do Python);
     # o que nenhum .c usa sai no link pelo --gc-sections
     Core/Src/clipes_demo.c
@@ -119,6 +122,18 @@ if(VALIDACAO_PLACA)
         message(WARNING "VALIDACAO_PLACA e BLOCOS13 ligados juntos (BLOCOS13 pode ter "
                         "ficado no cache): para a validacao, use -DBLOCOS13=OFF")
     endif()
+endif()
+
+# Build de medida do orcamento de flash e RAM (Core/Src/orcamento.c): poe no link
+# tudo o que o firmware final vai ter e que hoje o --gc-sections descarta (cadeia
+# completa, LDA, os 5 clipes, o recorte de 51,2 kHz e os buffers da decimacao),
+# SEM EXECUTAR nada disso, para medir pelo .map com o tools/orcamento_memoria.py.
+# DESLIGADO por padrao. Para medir: cmake --preset Debug -DORCAMENTO=ON (o valor
+# fica no cache do build, como o BLOCOS13; volte com -DORCAMENTO=OFF).
+option(ORCAMENTO "Build de medida: cadeia, clipes e decimacao no link, sem executar" OFF)
+if(ORCAMENTO)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/orcamento.c)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_ORCAMENTO)
 endif()
 
 # Add include paths

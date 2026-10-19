@@ -32,6 +32,9 @@
 #ifdef FIRMWARE_VALIDACAO_PLACA
 #include "validacao_placa.h"
 #endif
+#ifdef FIRMWARE_ORCAMENTO
+#include "orcamento.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -168,6 +171,13 @@ int main(void)
    * dos clipes, com as 26 caracteristicas e o escore pela serial, para o
    * validar_blocos.py --placa. Menos de 1 s. */
   validacao_placa_executar();
+#endif
+
+#ifdef FIRMWARE_ORCAMENTO
+  /* Build de medida (-DORCAMENTO=ON): poe no link a cadeia, os clipes, o recorte
+   * e os buffers da decimacao, sem executar nada, para medir pelo .map
+   * (tools/orcamento_memoria.py). Ver orcamento.h. */
+  orcamento_referenciar();
 #endif
 
   /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */

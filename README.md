@@ -22,6 +22,7 @@ Ao ligar, a placa:
 
    ```
    marco13 modelo=exp239 json=ee0c3e088366 n_features=26 segmentos=295 clock=100MHz
+   $CAB,1,exp239,ee0c3e088366,26,100*3B
    seg seg=0 grav=normal ref=-1577.959 placa=... dif=... tol=... dec=normal OK ciclos=...
    ...
    resumo ok=295/295 decisoes_iguais=295/295 dif_max=... (seg ...) dif/tol_max=...% ciclos min=... med=... max=... (med ... us)
@@ -29,7 +30,7 @@ Ao ligar, a placa:
    ```
 
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
-4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` na serial. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O LED da placa (PC13) fica aceso depois da conferência.
+4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` do segmento na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote são os do `lda_escore()`, medidos pelo DWT. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
 
 ### Cabeçalhos do modelo
 
@@ -51,9 +52,12 @@ A comparação com a referência e a formatação da serial compilam sem a HAL:
 
 ```bash
 gcc -std=c11 -O2 -Wall -Wextra -Werror -Wdouble-promotion -DMARCO_HOST \
-    -ICore/Inc tests/host/test_marco_lda.c Core/Src/marco_lda.c -lm -o build/test_marco_lda
+    -ICore/Inc tests/host/test_marco_lda.c Core/Src/marco_lda.c Core/Src/texto_fixo.c \
+    Core/Src/pacote_serial.c -lm -o build/test_marco_lda
 ./build/test_marco_lda
 ```
+
+O pacote da serial tem o seu próprio teste (seção "Pacote da serial").
 
 No PC o gcc não funde multiplicação e soma; no Cortex-M4 funde (`vfma.f32`). Os dois ficam dentro da tolerância, mas os escores não são bit a bit iguais.
 
@@ -91,13 +95,17 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              mfcc_estagios.c/.h, os estágios da extração de características
                              portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
                              placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C;
-                             validacao_placa.c/.h, o teste do segmento completo na placa)
-tests/host/                  teste no PC da parte do marco que não usa a HAL e testes das tabelas
-                             (test_mel_bordas.c, test_log_dct.c)
+                             validacao_placa.c/.h, o teste do segmento completo na placa;
+                             pacote_serial.c/.h, o formato do pacote da serial;
+                             texto_fixo.c/.h, float em texto sem o %f)
+tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL e
+                             testes das tabelas (test_mel_bordas.c, test_log_dct.c)
+tests/host/pacote/           leitor dos pacotes da serial (referência para o painel)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
 tests/host/validacao/        validação independente bloco a bloco (exportador do C e comparador em Python)
 docs/validacao-blocos.md     tabela de erros por bloco (PC, 295 segmentos) e o teste na placa
+tools/                       orcamento_memoria.py: flash e RAM por parte, lidas do .map
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -324,6 +332,84 @@ Números do build Debug, em bytes, com KiB entre parênteses. O relatório do li
 - **Com o teste desligado** e sem a integração dos clipes, nada do `clipes_demo.h` é usado, e o `--gc-sections` tira tudo do link.
 - **A flash varia ~1,6 KB entre máquinas** com versões diferentes da toolchain: o mesmo commit deu 322.800, 322.840 e 324.416 B com o teste ligado.
 
+## Pacote da serial
+
+Formato **v1**, definido em 17/10 a partir da decisão "O que o painel mostra no lugar de grau de confiança" (Registro de Decisões). Código em `Core/Src/pacote_serial.c`; leitor de referência para o painel em `tests/host/pacote/ler_pacotes.py`.
+
+**Texto, uma linha por segmento de 1 s, no estilo das sentenças NMEA:** começa com `$`, campos separados por vírgula, e termina com `*` mais o checksum e `\r\n`. O checksum é o XOR de todos os bytes entre o `$` e o `*`, em 2 dígitos hexadecimais maiúsculos. Texto porque se lê direto no picocom e basta para a demonstração e o 2º parcial; o checksum porque o painel precisa descartar a linha que chegar corrompida em vez de mostrar um número errado. As outras linhas da serial (`hello`, `fft512`, `marco13`, `seg ...`, `demo ...`) não começam com `$`, e o painel as ignora.
+
+A 115200 baud, um `$SEG` típico (~45 B) leva cerca de 4 ms, contra 1 s de áudio por segmento.
+
+### `$CAB`: cabeçalho, uma vez ao ligar
+
+```
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+```
+
+| # | Campo | Exemplo | Significado |
+|---|---|---|---|
+| 1 | versão | `1` | versão do formato; o painel recusa outra |
+| 2 | modelo | `exp239` | id do modelo da LDA (`VT_MODELO_ID`) |
+| 3 | json | `ee0c3e088366` | 12 primeiros dígitos do SHA-256 do `lda_final.json` |
+| 4 | n_features | `26` | número de características |
+| 5 | clock | `100` | clock da CPU em MHz, para converter os ciclos em tempo |
+
+O painel confere o modelo antes de mostrar os segmentos. Se a placa reiniciar, o `$CAB` vem de novo.
+
+### `$SEG`: um segmento
+
+```
+$SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
+```
+
+| # | Campo | Valores | Significado |
+|---|---|---|---|
+| 1 | versão | `1` | versão do formato |
+| 2 | n | 0, 1, 2… | contador desde o boot; um salto mostra pacote perdido, e voltar a 0 mostra que a placa reiniciou |
+| 3 | origem | `R`, `C`, `A` | `R`: características de referência do Python (marco de 13/10); `C`: clipe na flash (`clipes_demo.h`); `A`: áudio ao vivo (reservado) |
+| 4 | clipe | inteiro ou vazio | `R`: índice da gravação (`vt_gravacao`); `C`: índice do clipe; `A`: vazio |
+| 5 | segmento | inteiro | `R`: id do segmento no conjunto (`vt_segmento`); `C`: segmento dentro do clipe |
+| 6 | decisão | `N`, `F` | normal ou falha (LDA **ou** novidade) |
+| 7 | disparou | `0`–`3` ou `4` | máscara: 0 = nenhum, 1 = LDA, 2 = novidade, 3 = ambos; **4 = erro**, sempre sozinho (ver "Erro" abaixo) |
+| 8 | escore da LDA | 3 casas | valor cru, **falha se ≥ 0**. Não é confiança e nunca vai em % |
+| 9 | código de novidade | `0`–`4` | 0 = não adotado (também no D4); 1 = pente, série BPFO; 2 = pente, série BPFI; 3 = D2 (Mahalanobis² no MFCC); 4 = D3 (Mahalanobis² no MFCC + pente) |
+| 10 | pontuação de novidade | 3 casas ou vazio | vazio com código 0. Em dB no pente, Mahalanobis² no D2/D3 |
+| 11 | limiar de novidade | 3 casas ou vazio | vazio com código 0. **Falha se pontuação > limiar** (estritamente maior) |
+| 12 | ciclos | inteiro | ciclos do DWT do processamento do segmento. Hoje, na origem `R`, são só os do `lda_escore()`; com a cadeia completa, vão do `int16` até a decisão |
+
+**Sentidos das comparações.** A LDA dá falha com escore **≥ 0** e o detector de novidade com pontuação **> limiar**, os mesmos sentidos do Python. A placa decide pelo `float`. **No escore da LDA, o sinal do texto é sempre o da decisão:** todo escore negativo sai com `-`, inclusive o que arredonda a zero (−0,0004 sai `-0.000`, decisão `N`). O `-0.0f` não é negativo (`-0.0f < 0` é falso), então sai `0.000` e é falha, como no `lda_e_falha()`. Assim, o painel pode ler a decisão da LDA pelo sinal do texto, sem exceção na fronteira; em Python, use o sinal da string, porque `float("-0.000") >= 0` é verdadeiro. O formatador do marco (`texto_fixo()`) continua sem `-0.000`; o `-` é posto só no `pacote_linha()`. Na novidade (campos reservados), quando a pontuação e o limiar arredondam para o mesmo valor, vale o campo de decisão.
+
+**Erro (disparou = 4).** Se o escore da LDA, ou a pontuação ou o limiar de novidade com detector adotado, não for finito (NaN ou infinito), o pacote sai com `disparou = 4`, sozinho, e decisão `F`, e a placa pisca os dois LEDs juntos em vez de acender um deles. Num detector de falha, uma conta que deu errado não pode aparecer como "normal": `NaN >= 0` é falso, e sem esse bit um escore NaN sairia `N` com o LED verde. O texto do valor mostra o problema (`nan`, `inf` ou `-inf`). Hoje a cadeia não gera NaN com entrada válida (o log tem o épsilon e o Welford divide por n ≥ 1); o caso provável é futuro, a pontuação do pente com fundo zero (infinito menos infinito). Um `inf` **sem** o bit de erro também pode aparecer: é um valor finito grande demais para o texto (≥ ~4 × 10⁶ com 3 casas), e o sinal dele continua valendo. O painel mostra "erro" para o 4.
+
+**Pente (D1/D1b), que tem duas séries.** Vai a série com a maior diferença pontuação − limiar (em dB), e o código diz qual (1 ou 2). Em empate, vai a BPFO. O painel mostra a pontuação e o limiar, não a diferença.
+
+**O que não vai no pacote:** a razão pontuação ÷ limiar (seria lida como força da detecção) e a consistência entre segmentos ("k de N segmentos recentes indicaram falha"), que o painel calcula a partir da sequência de `$SEG`.
+
+**Os campos de novidade estão reservados, não prometidos.** Enquanto nenhum detector for adotado, o código é 0, e a pontuação e o limiar vão vazios. Adotar um detector não muda o formato; mudar o formato exige subir a versão (`PACOTE_VERSAO`).
+
+**Limites.** Com 3 casas, cada número vai até cerca de ±4 × 10⁶; acima disso, sai `inf` (`texto_fixo.h`). Esse limite é o de caber em `uint32_t`, não o de precisão: o `float` tem ~7 dígitos significativos, então acima de ~10.000 a terceira casa já não é confiável. O escore da LDA fica em ±1.600. O id do modelo não pode ter vírgula nem `*`. A maior linha possível cabe em `PACOTE_TAM_MAX` (128 B).
+
+### Testar no PC
+
+```bash
+gcc -std=c11 -O2 -Wall -Wextra -Werror -Wdouble-promotion -DMARCO_HOST \
+    -ICore/Inc tests/host/test_pacote_serial.c Core/Src/pacote_serial.c \
+    Core/Src/texto_fixo.c Core/Src/marco_lda.c -lm -o build/test_pacote_serial
+./build/test_pacote_serial > build/pacotes_exemplo.txt
+python3 tests/host/pacote/ler_pacotes.py --arquivo build/pacotes_exemplo.txt --resumo
+python3 tests/host/pacote/ler_pacotes.py --autoteste
+```
+
+O teste em C confere as linhas exatas (com o checksum), os sentidos das comparações, a escolha da série do pente, a fronteira, o tamanho máximo e o buffer pequeno, e que o pacote de cada um dos 295 segmentos do marco tem a mesma decisão do LED e do CSV. Na saída padrão, ele escreve um `$CAB` e um `$SEG` por segmento, e o leitor em Python confere o mesmo formato: os dois lados precisam concordar. O `--autoteste` confere que o leitor aceita as linhas certas e recusa as erradas (checksum, campos, versão, decisão incoerente).
+
+### Ler da placa
+
+```bash
+python3 tests/host/pacote/ler_pacotes.py --porta /dev/ttyUSB0 --segundos 30 --salvar build/captura_pacotes.txt
+```
+
+Aperte o RESET da placa logo depois, para pegar também o `$CAB`. Com `--csv arquivo.csv`, os segmentos são gravados em CSV. Feche o picocom antes: só um programa abre a serial por vez.
+
 ## Validação bloco a bloco
 
 A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
@@ -338,12 +424,47 @@ A validação independente da cadeia em C (card "Validar cada bloco da cadeia em
 | Flash usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
 | RAM usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 7.216 B de 128 KB (5,5 %) |
 | Flash e RAM com a cadeia (`mfcc_segmento()`) e o `lda_escore()` ligados, sem o teste dos blocos 1 a 3 | ~62,7 KB de flash sem contar o áudio (os 5 clipes de 2 s somam 256 KB) e 18.000 B de RAM (13,7 %) |
+| Firmware final medido no build de medida: cadeia, LDA, 5 clipes, recorte de 51,2 kHz e buffers da decimação no link (seção "Orçamento medido") | 427.152 B de flash (81,5 %) e 23.216 B de RAM (17,7 %) |
 
 As duas primeiras linhas são o build padrão de hoje: ele ainda não chama o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
 
 Um quadro de 320 amostras a 12,8 kHz dura 25 ms; a FFT ocupa cerca de 1,5% desse tempo.
 
-**Orçamento da flash para o áudio:** reservando 64 KB para o resto do firmware (banco de filtros de Mel, DCT, `.h` da LDA, pente harmônico se for adotado e margem), sobram cerca de 434 KB. Em PCM int16 a 12,8 kHz (25.600 B por segundo), isso dá **cerca de 17 s de áudio decimado**. Com 1 s a 51,2 kHz para a demonstração da decimação na placa, sobram cerca de 13 s a 12,8 kHz. A reserva é uma estimativa e deve ser revista quando a matriz de Mel e o pente estiverem definidos.
+**Orçamento da flash para o áudio:** reservando 64 KB para o resto do firmware (banco de filtros de Mel, DCT, `.h` da LDA, pente harmônico se for adotado e margem), sobram cerca de 434 KB. Em PCM int16 a 12,8 kHz (25.600 B por segundo), isso dá **cerca de 17 s de áudio decimado**. Com 1 s a 51,2 kHz para a demonstração da decimação na placa, sobram cerca de 13 s a 12,8 kHz. A reserva é uma estimativa e deve ser revista quando a matriz de Mel e o pente estiverem definidos. A medida com tudo no link (18/10) está logo abaixo.
+
+### Orçamento medido (build de medida)
+
+O build padrão não mostra o orçamento do firmware final: o `--gc-sections` tira do link tudo o que ninguém chama ainda (a cadeia, os clipes, o recorte de 51,2 kHz e a decimação). O **build de medida** (`-DORCAMENTO=ON`, `Core/Src/orcamento.c`) põe essas partes no link **sem executar nenhuma delas**: a chamada fica atrás de uma variável `volatile` que vale sempre 0. Assim, o `.map` mostra o tamanho real de cada parte, e a placa se comporta como no build padrão. Os buffers da decimação têm os tamanhos que o `clipes_demo.h` descreve (estado da CMSIS com 147 + 512 − 1 floats, um bloco de entrada e as saídas de um bloco).
+
+```bash
+cmake --preset Debug -DORCAMENTO=ON -DBLOCOS13=OFF
+cmake --build --preset Debug
+python3 tools/orcamento_memoria.py build/Debug/frente1.map
+```
+
+O valor fica no cache do build, como o do `BLOCOS13`; volte com `-DORCAMENTO=OFF`. O script lê o `.map` e soma as seções de entrada pela parte do firmware a que elas pertencem, contando pelo endereço, porque as strings mescladas pelo linker aparecem no `.map` com o tamanho de antes da mescla. Ele só usa a biblioteca padrão do Python. O total pode diferir em alguns bytes do relatório do linker, que conta também os vãos de alinhamento entre seções.
+
+Resultado em 18/10 (build Debug, com o `main` depois dos blocos 4 a 6):
+
+| Parte | Flash (B) | RAM (B) |
+|---|---:|---:|
+| clipes a 12,8 kHz (5 clipes de 2 s) | 256.215 | 0 |
+| recorte a 51,2 kHz (1 s, com as margens) | 103.284 | 0 |
+| cadeia (MFCC) | 1.276 | 10.788 |
+| decimação (buffers; a `arm_fir_decimate_f32` está na linha da CMSIS-DSP) | 0 | 5.204 |
+| build de medida (`orcamento.c`; não vai para o firmware final) | 516 | 8 |
+| marco e LDA (com os vetores de teste do marco) | 36.502 | 2 |
+| CMSIS-DSP (com a `arm_fir_decimate_f32` e o init dela, +284 B em relação ao build padrão) | 11.460 | 0 |
+| HAL e CubeMX | 6.025 | 13 |
+| aplicação base (inclui a FFT de teste da Frente 1) | 2.172 | 5.220 |
+| biblioteca C | 9.528 | 408 |
+| alinhamento e outros | 174 | 33 |
+| reserva de heap e pilha (linker script) | 0 | 1.540 |
+| **total** | **427.152** (81,5 %) | **23.216** (17,7 %) |
+
+- **Flash:** sobram 97.136 B (94,9 KiB). O áudio ocupa 359.499 B. O resto do firmware ocupa 67.653 B, um pouco acima da reserva de 64 KB do orçamento. Desse total, 516 B são o código do próprio build de medida, que não vai para o firmware final, e 34.250 B são os vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`. Os 94,9 KiB livres equivalem a ~3,8 s a mais de áudio a 12,8 kHz, e são também o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado.
+- **RAM:** sobram 107.856 B (105,3 KiB). Com os ~40 KB do detector de novidade, ainda sobrariam ~65 KiB. Dos 5.220 B da aplicação base, 3.072 B são os buffers da FFT de teste da Frente 1 (`fft_in` e `fft_mag` no `main.c`), que também podem sair do firmware final.
+- **Pilha:** a reserva do linker é só o mínimo (1.024 B), e o linker não avisa se a pilha real passar dela. A cadeia usa ~0,3 KB de pilha (medida pela Amanda com `-fstack-usage`), então cabe. A RAM livre é o espaço para onde a pilha pode crescer.
 
 ## Próximos passos
 
