@@ -4,6 +4,7 @@
 
 #include "validacao_placa.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -22,6 +23,22 @@ static uint32_t bits(float v)
     uint32_t u;
     memcpy(&u, &v, sizeof u);
     return u;
+}
+
+/* Acrescenta texto a linha a partir de n e devolve o novo tamanho, ou -1 se nao
+ * couber (e continua -1 nas chamadas seguintes): assim o tamanho que sobra nunca
+ * da a volta e nenhum snprintf escreve fora do buffer. */
+static int __attribute__((format(printf, 4, 5)))
+acrescentar(char *linha, size_t tam, int n, const char *fmt, ...)
+{
+    if (n < 0 || (size_t)n >= tam) {
+        return -1;
+    }
+    va_list ap;
+    va_start(ap, fmt);
+    const int m = vsnprintf(linha + n, tam - (size_t)n, fmt, ap);
+    va_end(ap);
+    return (m < 0 || (size_t)m >= tam - (size_t)n) ? -1 : n + m;
 }
 
 int validacao_placa_rodar(val_enviar_fn enviar, val_ciclos_fn ciclos, uint32_t clock_hz)
@@ -63,14 +80,20 @@ int validacao_placa_rodar(val_enviar_fn enviar, val_ciclos_fn ciclos, uint32_t c
             }
             const float escore = lda_escore(x);
 
-            n = snprintf(linha, sizeof linha, "val seg id=%u classe=%s ciclos=%lu escore=%08lx x=",
-                         (unsigned)seg->id, clipes[c].classe, (unsigned long)(t1 - t0),
-                         (unsigned long)bits(escore));
+            n = acrescentar(linha, sizeof linha, 0, "val seg id=%u classe=%s ciclos=%lu escore=%08lx x=",
+                            (unsigned)seg->id, clipes[c].classe, (unsigned long)(t1 - t0),
+                            (unsigned long)bits(escore));
             for (int i = 0; i < 2 * MFCC_N_COEFS; ++i) {
-                n += snprintf(linha + n, sizeof linha - (size_t)n, i ? ",%08lx" : "%08lx",
-                              (unsigned long)bits(x[i]));
+                n = acrescentar(linha, sizeof linha, n, i ? ",%08lx" : "%08lx", (unsigned long)bits(x[i]));
             }
-            n += snprintf(linha + n, sizeof linha - (size_t)n, "\r\n");
+            n = acrescentar(linha, sizeof linha, n, "\r\n");
+            if (n < 0) {
+                /* nao acontece com os clipes de hoje (~310 B); uma linha cortada seria
+                 * recusada pelo validador, mas o aviso diz o motivo */
+                n = snprintf(linha, sizeof linha, "val ERRO linha_longa id=%u\r\n", (unsigned)seg->id);
+                enviar(linha, (size_t)n);
+                return -4;
+            }
             enviar(linha, (size_t)n);
         }
     }

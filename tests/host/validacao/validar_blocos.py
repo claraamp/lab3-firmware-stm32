@@ -25,8 +25,14 @@ Uso (na raiz do repositorio do firmware, com o do Python ao lado):
     ./build/harness/exportar_saidas_c REFS build/saidas_c
     python3 tests/host/validacao/validar_blocos.py --refs REFS --saidas build/saidas_c [--placa CAPTURA] [--md SAIDA.md]
 
-REFS e uma pasta do 08_export_stage_references.py: a versionada (5 segmentos) ou
-uma gerada com --segmentos (os 295 da particao, ver docs/validacao-blocos.md).
+So a placa, sem o PCM decimado (referencias dos 10 segmentos dos clipes):
+    python3 tests/host/validacao/gerar_refs_clipes.py --out build/refs_clipes
+    python3 tests/host/validacao/validar_blocos.py --refs build/refs_clipes --placa CAPTURA
+
+REFS e uma pasta no formato do 08_export_stage_references.py: a versionada (5
+segmentos), uma gerada com --segmentos (os 295 da particao, ver
+docs/validacao-blocos.md) ou a do gerar_refs_clipes.py. Passe --saidas, --placa ou
+os dois.
 
 Saida: 0 se tudo dentro das tolerancias e com as mesmas decisoes do Python; 1 se
 algo falhou; 2 se faltou entrada.
@@ -121,11 +127,15 @@ class Pior:
         self.n += 1
 
 
-def comparar_pc(refs: Path, saidas: Path, dsp, csv_ref: dict):
+def tolerancias(dsp) -> dict:
     tol = {e: (m, ti, te) for e, m, ti, te in dsp.ESTAGIOS_PORTE}
     faltam = [e for e in ESTAGIOS if e not in tol]
     if faltam:
         raise ErroEntrada(f"dsp.ESTAGIOS_PORTE sem os estagios {faltam}")
+    return tol
+
+
+def comparar_pc(refs: Path, saidas: Path, dsp, csv_ref: dict, tol: dict):
     pastas = (refs / "segmentos.txt").read_text(encoding="utf-8").split()
     if not pastas:
         raise ErroEntrada("segmentos.txt vazio")
@@ -147,7 +157,7 @@ def comparar_pc(refs: Path, saidas: Path, dsp, csv_ref: dict):
             raise ErroEntrada(f"segmento {sid} nao esta no escores_referencia.csv")
         escore_c = float(ler_c(saidas / pasta, "encadeado", "escore", (1,))[0])
         escores.append((pasta, escore_c, csv_ref[sid][0], csv_ref[sid][1]))
-    return pastas, tol, pior, segmento_difere, escores
+    return pastas, pior, segmento_difere, escores
 
 
 def ler_placa(caminho: Path) -> tuple[dict, list]:
@@ -157,6 +167,10 @@ def ler_placa(caminho: Path) -> tuple[dict, list]:
     inicio, segs, fim = None, [], False
     for bruta in caminho.read_bytes().splitlines():
         linha = bruta.decode("ascii", errors="replace").strip()
+        i = linha.find("val ")
+        if i < 0:
+            continue
+        linha = linha[i:]   # ruido antes do "val " (comum logo depois do RESET)
         if linha.startswith("val inicio"):
             inicio = dict(p.split("=", 1) for p in linha.split()[2:] if "=" in p)
             segs, fim = [], False   # a placa reiniciou: vale a ultima execucao
@@ -226,6 +240,11 @@ def cientifico(v: float, md: bool) -> str:
     return f"{mant.replace('.', ',')} × 10{str(int(exp)).translate(SOBRESCRITO)}"
 
 
+def fixo(v: float, casas: int, md: bool) -> str:
+    s = f"{v:.{casas}f}"
+    return s.replace(".", ",") if md else s
+
+
 def pct(v: float, md: bool) -> str:
     s = f"{100 * v:.1f}%"
     return s.replace(".", ",") if md else s
@@ -247,10 +266,11 @@ def tabela_pc(pior, tol, modo, md):
     return cab, linhas, falhas
 
 
-def imprimir(cab, linhas, md, saida):
+def imprimir(cab, linhas, md, saida, direita):
+    """`direita`: indices das colunas numericas, alinhadas a direita no Markdown."""
     if md:
         saida.append("| " + " | ".join(cab) + " |")
-        saida.append("|" + "|".join("---:" if i in (2, 3, 4, 5, 6) else "---" for i in range(len(cab))) + "|")
+        saida.append("|" + "|".join("---:" if i in direita else "---" for i in range(len(cab))) + "|")
         saida.extend("| " + " | ".join(str(c) for c in l) + " |" for l in linhas)
     else:
         larg = [max(len(str(x)) for x in col) for col in zip(cab, *linhas)]
@@ -258,13 +278,25 @@ def imprimir(cab, linhas, md, saida):
         saida.extend("  ".join(str(c).ljust(w) for c, w in zip(l, larg)) for l in linhas)
 
 
-def relatorio(md, pastas, tol, pior, segmento_difere, escores, placa):
+def relatorio(md, tol, pc, placa):
+    s, falhas = [], 0
+    if pc is not None:
+        f, s = relatorio_pc(md, tol, *pc)
+        falhas += f
+    if placa is not None:
+        falhas += relatorio_placa(md, tol, placa, s)
+    s.append(f"\n{'**' if md else ''}{'VALIDACAO FALHOU' if falhas else 'VALIDACAO OK'}"
+             f"{'**' if md else ''}" + ("" if not falhas else f" ({falhas} item(ns) fora)"))
+    return s, falhas
+
+
+def relatorio_pc(md, tol, pastas, pior, segmento_difere, escores):
     s, falhas = [], 0
     for modo in MODOS:
         s.append(f"\n{'### ' if md else ''}Modo {modo} ({len(pastas)} segmentos)\n")
         cab, linhas, f = tabela_pc(pior, tol, modo, md)
         falhas += f
-        imprimir(cab, linhas, md, s)
+        imprimir(cab, linhas, md, s, direita=(2, 3, 4, 5, 6))
 
     s.append(f"\n{'### ' if md else ''}Chamada única e escore final\n")
     if segmento_difere:
@@ -285,54 +317,58 @@ def relatorio(md, pastas, tol, pior, segmento_difere, escores, placa):
              f"erro relativo máximo {cientifico(rel.max(), md)}.")
     s.append(f"- Decisões iguais às do CSV: {dec_iguais}/{len(escores)}. Menor |escore| do CSV: {menor:.1f}, "
              f"{menor / dif.max():.0f} vezes a maior diferença.")
+    return falhas, s
 
-    if placa is not None:
-        inicio, linhas = placa
-        s.append(f"\n{'### ' if md else ''}Placa: segmento completo ({len(linhas)} segmentos, "
-                 f"clock {inicio.get('clock', '?')})\n")
-        cab = ["Segmento", "Média (abs)", "Desvio (rel)", "Escore (rel)", "Escore − CSV", "Decisão",
-               "Ciclos", "Situação"]
-        tab = []
-        for l in linhas:
-            ok = all(l["ok"].values()) and l["dec_ok"]
-            falhas += not ok
-            tab.append([l["pasta"], cientifico(l["a4"]["media"], md), cientifico(l["a4"]["desvio"], md),
-                        cientifico(l["a4"]["escore"], md), f"{l['dif_csv']:.4f}",
-                        "igual" if l["dec_ok"] else "DIFERENTE", l["ciclos"], "OK" if ok else "FALHOU"])
-        imprimir(cab, tab, md, s)
-        for e in ("media", "desvio", "escore"):
-            m = max(l["a4"][e] for l in linhas)
-            s.append(f"- {e}: maior métrica A4 {cientifico(m, md)}, {pct(m / tol[e][2], md)} da tolerância "
-                     f"encadeada ({cientifico(tol[e][2], md)}).")
-        ciclos = sorted(l["ciclos"] for l in linhas)
-        if ciclos[-1] == 0:
-            s.append("- Ciclos zerados: saída do emulador no PC, não da placa.")
-        else:
-            mhz = int(re.sub(r"\D", "", inicio.get("clock", "100")) or 100)
-            med = ciclos[(len(ciclos) - 1) // 2]
-            s.append(f"- Segmento de 1 s: mediana de {med} ciclos ({med / mhz / 1000:.1f} ms a {mhz} MHz), "
-                     f"de {ciclos[0]} a {ciclos[-1]}.")
-    s.append(f"\n{'**' if md else ''}{'VALIDACAO FALHOU' if falhas else 'VALIDACAO OK'}"
-             f"{'**' if md else ''}" + ("" if not falhas else f" ({falhas} item(ns) fora)"))
-    return s, falhas
+
+def relatorio_placa(md, tol, placa, s):
+    falhas = 0
+    inicio, linhas = placa
+    s.append(f"\n{'### ' if md else ''}Placa: segmento completo ({len(linhas)} segmentos, "
+             f"clock {inicio.get('clock', '?')})\n")
+    cab = ["Segmento", "Média (abs)", "Desvio (rel)", "Escore (rel)", "Escore − CSV", "Decisão",
+           "Ciclos", "Situação"]
+    tab = []
+    for l in linhas:
+        ok = all(l["ok"].values()) and l["dec_ok"]
+        falhas += not ok
+        tab.append([l["pasta"], cientifico(l["a4"]["media"], md), cientifico(l["a4"]["desvio"], md),
+                    cientifico(l["a4"]["escore"], md), fixo(l["dif_csv"], 4, md),
+                    "igual" if l["dec_ok"] else "DIFERENTE", l["ciclos"], "OK" if ok else "FALHOU"])
+    imprimir(cab, tab, md, s, direita=(1, 2, 3, 4, 6))
+    for e in ("media", "desvio", "escore"):
+        m = max(l["a4"][e] for l in linhas)
+        s.append(f"- {e}: maior métrica A4 {cientifico(m, md)}, {pct(m / tol[e][2], md)} da tolerância "
+                 f"encadeada ({cientifico(tol[e][2], md)}).")
+    ciclos = sorted(l["ciclos"] for l in linhas)
+    if ciclos[-1] == 0:
+        s.append("- Ciclos zerados: saída do emulador no PC, não da placa.")
+    else:
+        mhz = int(re.sub(r"\D", "", inicio.get("clock", "100")) or 100)
+        med = ciclos[(len(ciclos) - 1) // 2]
+        s.append(f"- Segmento de 1 s: mediana de {med} ciclos ({fixo(med / mhz / 1000, 1, md)} ms a "
+                 f"{mhz} MHz), de {ciclos[0]} a {ciclos[-1]}.")
+    return falhas
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--refs", type=Path, required=True, help="pasta do 08 (referencias por estagio)")
-    ap.add_argument("--saidas", type=Path, required=True, help="pasta do exportar_saidas_c")
+    ap.add_argument("--saidas", type=Path, help="pasta do exportar_saidas_c (comparacao no PC)")
     ap.add_argument("--python-repo", type=Path, default=PYTHON_PADRAO)
     ap.add_argument("--escores", type=Path, default=None, help="padrao: reports/modelo_final/escores_referencia.csv")
     ap.add_argument("--placa", type=Path, help="saida do validacao_placa (captura da serial)")
     ap.add_argument("--md", type=Path, help="grava as tabelas em Markdown neste arquivo")
     args = ap.parse_args()
+    if not args.saidas and not args.placa:
+        ap.error("passe --saidas (comparacao no PC), --placa (captura da placa) ou os dois")
 
     try:
         dsp = importar_dsp(args.python_repo)
         escores_csv = args.escores or args.python_repo / "reports" / "modelo_final" / "escores_referencia.csv"
         csv_ref = ler_csv(escores_csv)
         modelo = dict(l.split(None, 1) for l in (args.refs / "modelo.txt").read_text().splitlines() if l.strip())
-        pastas, tol, pior, difere, escores = comparar_pc(args.refs, args.saidas, dsp, csv_ref)
+        tol = tolerancias(dsp)
+        pc = comparar_pc(args.refs, args.saidas, dsp, csv_ref, tol) if args.saidas else None
         placa = comparar_placa(args.placa, args.refs, dsp, csv_ref, tol, modelo) if args.placa else None
     except (ErroEntrada, OSError, ValueError, KeyError) as e:
         print(f"erro: {e}")
@@ -340,10 +376,10 @@ def main() -> int:
 
     manifest = json.loads((args.refs / "manifest.json").read_text(encoding="utf-8"))
     print(f"referencias: {args.refs} (commit {manifest.get('commit', '?')}, modelo {modelo.get('id')})")
-    texto, falhas = relatorio(False, pastas, tol, pior, difere, escores, placa)
+    texto, falhas = relatorio(False, tol, pc, placa)
     print("\n".join(texto))
     if args.md:
-        md, _ = relatorio(True, pastas, tol, pior, difere, escores, placa)
+        md, _ = relatorio(True, tol, pc, placa)
         args.md.parent.mkdir(parents=True, exist_ok=True)
         args.md.write_text("\n".join(md).lstrip("\n") + "\n", encoding="utf-8")
         print(f"tabelas em {args.md}")

@@ -113,6 +113,12 @@ if(VALIDACAO_PLACA)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/validacao_placa.c)
     set_source_files_properties(Core/Src/validacao_placa.c PROPERTIES COMPILE_OPTIONS "-O2")
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_VALIDACAO_PLACA)
+    if(BLOCOS13)
+        # os dois testes rodam no boot; o binario do blocos13 sai antes e o
+        # validar_blocos.py nao acha a validacao no meio dele
+        message(WARNING "VALIDACAO_PLACA e BLOCOS13 ligados juntos (BLOCOS13 pode ter "
+                        "ficado no cache): para a validacao, use -DBLOCOS13=OFF")
+    endif()
 endif()
 
 # Add include paths

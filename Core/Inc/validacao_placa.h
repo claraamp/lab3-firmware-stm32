@@ -17,7 +17,8 @@
  *   ...
  *   val FIM
  *
- * Leva menos de 1 s (10 segmentos de ~55 ms e 10 linhas de ~330 B).
+ * Leva menos de 1 s: na placa, cada segmento levou 6,145 M ciclos (61,5 ms a
+ * 100 MHz, medido em 19/10), e as 10 linhas tem ~310 B cada.
  *
  * A parte sem HAL compila no PC com -DVALIDACAO_HOST
  * (tests/host/validacao/emular_validacao_placa.c gera a mesma saida sem a placa).
@@ -32,8 +33,9 @@
 typedef void (*val_enviar_fn)(const char *texto, size_t n);
 typedef uint32_t (*val_ciclos_fn)(void);
 
-/* Roda os segmentos e manda as linhas por `enviar`. Devolve 0, ou o codigo do
- * mfcc_estagios_init() / mfcc_segmento() que falhou. */
+/* Roda os segmentos e manda as linhas por `enviar`. Devolve 0, o codigo do
+ * mfcc_estagios_init() / mfcc_segmento() que falhou, ou -4 se uma linha nao
+ * coubesse no buffer (manda "val ERRO linha_longa" em vez de uma linha cortada). */
 int validacao_placa_rodar(val_enviar_fn enviar, val_ciclos_fn ciclos, uint32_t clock_hz);
 
 #ifndef VALIDACAO_HOST
