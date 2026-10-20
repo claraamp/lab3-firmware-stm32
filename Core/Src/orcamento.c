@@ -8,7 +8,6 @@
 
 #include <stdint.h>
 
-#include "arm_math.h"
 #include "clipes_demo.h"
 #include "lda_modelo.h"
 #include "mfcc_estagios.h"
@@ -21,17 +20,12 @@ static volatile uint32_t orcamento_executar = 0u;
  * poderia descartar as contas cujo resultado ninguem le. */
 static volatile float orcamento_saida;
 
-/* Buffers da decimacao em blocos, nos tamanhos que o clipes_demo.h descreve
- * (estado da CMSIS com RECORTE_N_TAPS + RECORTE_BLOCO - 1 floats, um bloco de
- * entrada em float e as saidas de um bloco). Estaticos, como os da cadeia,
- * para entrarem na conta de RAM do linker. */
-static arm_fir_decimate_instance_f32 decimador;
-static float decimador_estado[RECORTE_N_TAPS + RECORTE_BLOCO - 1];
-static float decimador_x[RECORTE_BLOCO];
-static float decimador_y[RECORTE_BLOCO / RECORTE_FATOR];
+/* Os buffers da decimacao ficavam aqui ate 20/10. Agora sao os de verdade, no
+ * decimacao.c, que o build padrao usa; manter uma copia aqui contaria a RAM deles
+ * duas vezes no build de medida. */
 
-/* Nunca chamada de verdade (ver orcamento_executar). Nao e o laco da cadeia nem
- * o da decimacao: so toca em cada coisa uma vez para ela ir para o link. */
+/* Nunca chamada de verdade (ver orcamento_executar). Nao e o laco da cadeia: so
+ * toca em cada coisa uma vez para ela ir para o link. */
 static void __attribute__((noinline)) referenciar_tudo(void)
 {
     float x[2 * MFCC_N_COEFS];
@@ -47,13 +41,7 @@ static void __attribute__((noinline)) referenciar_tudo(void)
     }
     s += clipes_segmentos[0].escore_ref;
 
-    arm_fir_decimate_init_f32(&decimador, RECORTE_N_TAPS, RECORTE_FATOR, recorte_fir,
-                              decimador_estado, RECORTE_BLOCO);
-    for (int i = 0; i < RECORTE_BLOCO; ++i) {
-        decimador_x[i] = (float)recorte_51200[i];
-    }
-    arm_fir_decimate_f32(&decimador, decimador_x, decimador_y, RECORTE_BLOCO);
-    s += decimador_y[0] + (float)recorte_51200[RECORTE_N_AMOSTRAS - 1];
+    s += (float)recorte_51200[RECORTE_N_AMOSTRAS - 1] + recorte_fir[0];
 
     orcamento_saida = s;
 }

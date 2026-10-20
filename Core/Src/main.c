@@ -27,6 +27,7 @@
 #include "arm_math.h"
 #include "marco_lda.h"
 #include "cadeia_clipes.h"
+#include "decimacao.h"
 #ifdef FIRMWARE_BLOCOS13
 #include "blocos13.h"
 #endif
@@ -175,9 +176,9 @@ int main(void)
 #endif
 
 #ifdef FIRMWARE_ORCAMENTO
-  /* Build de medida (-DORCAMENTO=ON): poe no link a cadeia, os clipes, o recorte
-   * e os buffers da decimacao, sem executar nada, para medir pelo .map
-   * (tools/orcamento_memoria.py). Ver orcamento.h. */
+  /* Build de medida (-DORCAMENTO=ON): poe no link o que o build padrao ainda nao
+   * usa, sem executar nada, para medir pelo .map (tools/orcamento_memoria.py).
+   * Ver orcamento.h. */
   orcamento_referenciar();
 #endif
 
@@ -188,6 +189,12 @@ int main(void)
    * clipes da flash, conferidos com o escores_referencia.csv, com os ciclos de cada
    * bloco pelo DWT. Cerca de 1,3 s. Ver cadeia_clipes.h. */
   const int cadeia_ok = cadeia_verificar();
+
+  /* Decimacao embarcada (bloco 0, 20/10): o recorte de 1 s a 51,2 kHz pelo
+   * arm_fir_decimate_f32 (147 coeficientes, fator 4), comparado com o int16 do
+   * Python, e o segmento decimado pela cadeia, contra o escore de referencia do
+   * recorte. Ciclos pelo DWT. Cerca de 0,1 s. Ver decimacao.h. */
+  const int decimacao_ok = decimacao_verificar();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -198,10 +205,12 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     /* Demonstracao: a cadeia roda de novo em cada segmento dos clipes (origem C no
-     * $SEG). Trava de proposito nas DUAS conferencias: se o marco falhar (LDA ou
+     * $SEG). Trava de proposito nas TRES conferencias: se o marco falhar (LDA ou
      * cabecalhos do modelo incoerentes), os LEDs mostram o padrao de erro mesmo com
-     * a CADEIA OK, porque a demonstracao usa o mesmo lda_escore(). */
-    cadeia_passo(marco_ok && cadeia_ok);
+     * a CADEIA OK, porque a demonstracao usa o mesmo lda_escore(); e se a
+     * decimacao falhar, o firmware gravado tem um erro de porte que so a serial
+     * mostraria, e numa demonstracao ninguem esta olhando a serial. */
+    cadeia_passo(marco_ok && cadeia_ok && decimacao_ok);
   }
   /* USER CODE END 3 */
 }

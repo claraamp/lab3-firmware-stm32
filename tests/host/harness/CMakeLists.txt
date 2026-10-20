@@ -20,7 +20,8 @@ set(RAIZ ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
 set(DSP ${RAIZ}/Drivers/CMSIS/DSP)
 
 # So as funcoes que os estagios usam (FFT real de 512, produto e modulo ao
-# quadrado), com as mesmas tabelas restritas do firmware (CMakeLists.txt da raiz).
+# quadrado) e o decimador da decimacao embarcada, com as mesmas tabelas restritas
+# do firmware (CMakeLists.txt da raiz).
 add_library(cmsisdsp_host STATIC
     ${DSP}/Source/TransformFunctions/arm_rfft_fast_f32.c
     ${DSP}/Source/TransformFunctions/arm_rfft_fast_init_f32.c
@@ -33,6 +34,8 @@ add_library(cmsisdsp_host STATIC
     ${DSP}/Source/ComplexMathFunctions/arm_cmplx_mag_squared_f32.c
     ${DSP}/Source/BasicMathFunctions/arm_mult_f32.c
     ${DSP}/Source/BasicMathFunctions/arm_dot_prod_f32.c
+    ${DSP}/Source/FilteringFunctions/arm_fir_decimate_f32.c
+    ${DSP}/Source/FilteringFunctions/arm_fir_decimate_init_f32.c
 )
 target_include_directories(cmsisdsp_host
     PUBLIC  ${DSP}/Include
@@ -112,8 +115,22 @@ add_executable(test_cadeia_clipes
     ${RAIZ}/Core/Src/texto_fixo.c
 )
 target_compile_definitions(test_cadeia_clipes PRIVATE CADEIA_HOST)
+
+# Decimacao embarcada (Core/Src/decimacao.c): a verificacao que a placa faz ao
+# ligar, a fase do decimador, os criterios que tem que reprovar e as saidas em float
+# para o tests/host/decimacao/comparar_decimacao.py.
+add_executable(test_decimacao
+    ${RAIZ}/tests/host/test_decimacao.c
+    ${RAIZ}/Core/Src/decimacao.c
+    ${RAIZ}/Core/Src/cadeia_clipes.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
+    ${RAIZ}/Core/Src/pacote_serial.c
+    ${RAIZ}/Core/Src/texto_fixo.c
+)
+target_compile_definitions(test_decimacao PRIVATE DECIMACAO_HOST CADEIA_HOST)
 foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa
-        test_cadeia_clipes)
+        test_cadeia_clipes test_decimacao)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

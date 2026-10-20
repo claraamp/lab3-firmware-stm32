@@ -4,12 +4,12 @@ orcamento_memoria.py -- flash e RAM do firmware por parte, lidas do .map do link
 
 Le o frente1.map que o arm-none-eabi-ld grava em todo build (-Wl,-Map) e soma o
 tamanho de cada secao de entrada pela parte do firmware a que ela pertence:
-clipes, recorte de 51,2 kHz, cadeia (MFCC), decimacao, marco e LDA, pacote da
+clipes, recorte de 51,2 kHz, cadeia (MFCC), decimacao (bloco 0), marco e LDA, pacote da
 serial, CMSIS-DSP, HAL, biblioteca C e o resto. Mostra tambem a reserva de heap
 e pilha do linker script, a RAM livre e a projecao com o detector de novidade.
 
-Para medir o firmware final, compile o build de medida (orcamento.h), que poe no
-link a cadeia, os clipes, o recorte e os buffers da decimacao sem executar nada:
+Desde 20/10 o build padrao ja tem tudo (cadeia, clipes, recorte e decimacao); o
+build de medida (orcamento.h) continua valendo e mede o mesmo, mais o orcamento.c:
 
     cmake --preset Debug -DORCAMENTO=ON -DBLOCOS13=OFF
     cmake --build --preset Debug
@@ -41,7 +41,7 @@ SO_RAM = {".bss", "._user_heap_stack"}
 
 ORDEM = ["clipes a 12,8 kHz", "recorte a 51,2 kHz", "cadeia (MFCC)",
          "cadeia completa na placa (cadeia_clipes.c)",
-         "decimacao (buffers; a funcao esta na CMSIS-DSP)",
+         "decimacao (decimacao.c; a FIR esta na CMSIS-DSP)",
          "build de medida (orcamento.c; nao vai para o firmware final)",
          "marco e LDA", "pacote da serial", "teste dos blocos 1 a 3", "CMSIS-DSP",
          "HAL e CubeMX", "aplicacao base", "biblioteca C", "alinhamento", "outros"]
@@ -55,13 +55,12 @@ def parte(arquivo: str, secao: str) -> str:
         return "cadeia (MFCC)"
     if "cadeia_clipes.c" in a:
         return "cadeia completa na placa (cadeia_clipes.c)"
+    if "decimacao.c" in a:
+        # o codigo, o segmento decimado (25.600 B) e os buffers do decimador; a
+        # arm_fir_decimate_f32 e o init dela vem da libCMSISDSP.a e caem na linha
+        # da CMSIS-DSP
+        return "decimacao (decimacao.c; a FIR esta na CMSIS-DSP)"
     if "orcamento.c" in a:
-        # Os buffers da decimacao (decimador*) sao o que o firmware final vai
-        # ter; o resto do orcamento.c (o codigo que so toca em tudo e as duas
-        # variaveis volatile) existe so no build de medida. A arm_fir_decimate_f32
-        # e o init dela vem da libCMSISDSP.a e caem na linha da CMSIS-DSP.
-        if "decimador" in secao:
-            return "decimacao (buffers; a funcao esta na CMSIS-DSP)"
         return "build de medida (orcamento.c; nao vai para o firmware final)"
     if "marco_lda.c" in a:
         return "marco e LDA"
@@ -251,10 +250,11 @@ def main():
     if soma_f != flash or soma_r + heap_pilha != ram:
         print(f"\nAVISO: a soma das partes (flash {soma_f}, RAM {soma_r + heap_pilha}) nao bate com os "
               f"totais das secoes ({flash}, {ram}); alguma linha do .map nao foi reconhecida.")
-    if "orcamento.c" not in args.map.read_text(errors="replace"):
-        print("\nAVISO: este build nao tem o orcamento.c: o recorte de 51,2 kHz e a decimacao ficam "
-              "fora do link (a cadeia e os clipes ja entram no build padrao desde a integracao da "
-              "cadeia completa). Para o orcamento do firmware final, compile com -DORCAMENTO=ON.")
+    texto_map = args.map.read_text(errors="replace")
+    if "decimacao.c" not in texto_map and "orcamento.c" not in texto_map:
+        print("\nAVISO: este build nao tem o decimacao.c nem o orcamento.c: o recorte de 51,2 kHz e a "
+              "decimacao ficam fora do link (build anterior a 20/10). Para o orcamento do firmware "
+              "final, compile o build padrao atual ou o de medida (-DORCAMENTO=ON).")
     if args.markdown:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(texto + "\n")
