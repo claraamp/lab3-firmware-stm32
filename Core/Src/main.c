@@ -26,6 +26,7 @@
 #include <stdio.h>
 #include "arm_math.h"
 #include "marco_lda.h"
+#include "cadeia_clipes.h"
 #ifdef FIRMWARE_BLOCOS13
 #include "blocos13.h"
 #endif
@@ -182,6 +183,11 @@ int main(void)
 
   /* Marco de 13/10: LDA com as caracteristicas de referencia do Python */
   const int marco_ok = marco_lda_verificar();
+
+  /* Cadeia completa (20/10): mfcc_segmento() e lda_escore() nos 10 segmentos dos
+   * clipes da flash, conferidos com o escores_referencia.csv, com os ciclos de cada
+   * bloco pelo DWT. Cerca de 1,3 s. Ver cadeia_clipes.h. */
+  const int cadeia_ok = cadeia_verificar();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -191,7 +197,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-    marco_lda_passo(marco_ok);
+    /* Demonstracao: a cadeia roda de novo em cada segmento dos clipes (origem C no
+     * $SEG). Trava de proposito nas DUAS conferencias: se o marco falhar (LDA ou
+     * cabecalhos do modelo incoerentes), os LEDs mostram o padrao de erro mesmo com
+     * a CADEIA OK, porque a demonstracao usa o mesmo lda_escore(). */
+    cadeia_passo(marco_ok && cadeia_ok);
   }
   /* USER CODE END 3 */
 }

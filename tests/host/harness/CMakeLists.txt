@@ -100,7 +100,20 @@ add_executable(emular_validacao_placa
     ${RAIZ}/Core/Src/clipes_demo.c
 )
 target_compile_definitions(emular_validacao_placa PRIVATE VALIDACAO_HOST)
-foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa)
+
+# Cadeia completa do firmware normal (Core/Src/cadeia_clipes.c): a verificacao que a
+# placa faz ao ligar, os pacotes $SEG de origem C e a comparacao que tem que reprovar.
+add_executable(test_cadeia_clipes
+    ${RAIZ}/tests/host/test_cadeia_clipes.c
+    ${RAIZ}/Core/Src/cadeia_clipes.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
+    ${RAIZ}/Core/Src/pacote_serial.c
+    ${RAIZ}/Core/Src/texto_fixo.c
+)
+target_compile_definitions(test_cadeia_clipes PRIVATE CADEIA_HOST)
+foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa
+        test_cadeia_clipes)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

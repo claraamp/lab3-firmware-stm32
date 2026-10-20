@@ -200,8 +200,8 @@ int mfcc_quadro_coefs(const int16_t pcm[MFCC_N_QUADRO], float coefs[MFCC_N_COEFS
         return -3;
     }
     /* Buffers de um quadro estaticos (2,4 KB), e nao na pilha: assim entram na conta
-     * de RAM do linker. A pilha nao entra (o linker so reserva o _Min_Stack_Size, 1 KB),
-     * e 2,4 KB nela passariam dessa reserva sem aviso. Como o mfcc_espectro, nao e
+     * de RAM do linker. A pilha nao entra (o linker so reserva o _Min_Stack_Size, 4 KB),
+     * e 2,4 KB nela comeriam boa parte dessa reserva sem aviso. Como o mfcc_espectro, nao e
      * reentrante: chamar de um so contexto (nao de uma interrupcao e do laco ao mesmo tempo). */
     static float quadro[MFCC_N_QUADRO], potencia[MFCC_N_BINS], mel[MFCC_N_MEL];
     mfcc_quadro_pcm(pcm, quadro);

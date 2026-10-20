@@ -29,7 +29,8 @@
  *
  * A sequencia dos estagios 1 a 11 de um quadro esta no comentario do
  * mfcc_quadro_coefs(). Nao copie os buffers do quadro para a pilha (2,4 KB): o
- * linker so reserva 1 KB de pilha e nao avisa se ela passar disso.
+ * linker so reserva 4 KB de pilha (_Min_Stack_Size, era 1 KB ate 20/10) e nao
+ * avisa se ela passar disso.
  *
  * O `pcm` pode ficar na flash (clipes gravados) ou num buffer circular de 320
  * amostras int16 (audio ao vivo): os quadros se sobrepoem em 192 amostras. Para

@@ -6,7 +6,7 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT) e o **marco de 13/10**: a LDA roda na placa com as características de referência do Python. A cadeia de MFCC ainda não roda na placa; por isso as 26 características vêm prontas do Python, e o marco confere o porte do classificador, não o desempenho (os segmentos são os do treino do modelo final). O porte do MFCC está em `Core/Src/mfcc_estagios.c` e é conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"). **A cadeia inteira (blocos 1 a 6) passa no harness**, do `int16` ao escore da LDA, e a placa calcula as 26 características de um segmento com uma chamada, `mfcc_segmento()`. Os blocos 1 a 3 (janela, espectro e Mel) já rodam na placa, com a saída conferida contra o Python pela serial (seção "Blocos 1 a 3 na placa"); os blocos 4 a 6 (log, DCT, média e desvio) ainda vão para a placa.
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT), o **marco de 13/10** (a LDA na placa com as características de referência do Python) e, desde 20/10, a **cadeia completa no firmware normal**: os clipes de áudio da flash (`clipes_demo.h`) passam pelo `mfcc_segmento()` e pelo `lda_escore()` na placa, do `int16` à decisão, e a demonstração nos LEDs e o pacote `$SEG` (origem `C`) saem dessa inferência (seção "Cadeia completa na placa"). O porte do MFCC está em `Core/Src/mfcc_estagios.c` e foi conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"), e na placa pela validação bloco a bloco ([`docs/validacao-blocos.md`](docs/validacao-blocos.md)). Os segmentos dos clipes são os do treino do modelo final: a demonstração mostra a fidelidade do porte, não o desempenho.
 
 Ao ligar, a placa:
 
@@ -30,7 +30,10 @@ Ao ligar, a placa:
    ```
 
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
-4. em laço, **demonstração nos LEDs**: para cada gravação, o segmento de menor |escore| (o mais perto da fronteira). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` do segmento na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote são os do `lda_escore()`, medidos pelo DWT. Se a conferência falhou, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
+4. **roda a cadeia completa nos 10 segmentos dos clipes** (`cadeia_verificar()`, ~1,3 s): para cada um, o `mfcc_segmento()` e o `lda_escore()` do `int16` ao escore, conferido com o `escores_referencia.csv` pela tolerância encadeada do escore no A4 (1e-5 relativo), e os ciclos de cada bloco pelo DWT. Termina com o resumo, a mediana de cada bloco e `CADEIA OK` ou `CADEIA FALHOU`, e manda o `$CAB` de novo (seção "Cadeia completa na placa");
+5. em laço, **demonstração nos LEDs com a cadeia**: os 10 segmentos dos clipes em ordem, cada um processado de novo na hora (`mfcc_segmento()` → `lda_escore()`). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` de origem `C` na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote vão do `int16` ao escore. Se o marco **ou** a cadeia falharam, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. A trava nas duas conferências é de propósito: se só o marco falhar (a LDA ou os cabeçalhos do modelo incoerentes), a demonstração não roda, mesmo com a `CADEIA OK`, porque ela usa o mesmo `lda_escore()`. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
+
+   A demonstração com as características prontas (`marco_lda_passo()`, origem `R`) foi removida em 20/10; o marco ficou só como conferência no boot.
 
 ### Cabeçalhos do modelo
 
@@ -57,7 +60,7 @@ gcc -std=c11 -O2 -Wall -Wextra -Werror -Wdouble-promotion -DMARCO_HOST \
 ./build/test_marco_lda
 ```
 
-O pacote da serial tem o seu próprio teste (seção "Pacote da serial").
+O pacote da serial tem o seu próprio teste (seção "Pacote da serial"), e a cadeia completa também (seção "Cadeia completa na placa").
 
 No PC o gcc não funde multiplicação e soma; no Cortex-M4 funde (`vfma.f32`). Os dois ficam dentro da tolerância, mas os escores não são bit a bit iguais.
 
@@ -96,6 +99,8 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              portados para C; blocos13.c/.h, o teste dos blocos 1 a 3 na
                              placa; clipes_demo.h/.c, os clipes de áudio da Frente 3C;
                              validacao_placa.c/.h, o teste do segmento completo na placa;
+                             cadeia_clipes.c/.h, a cadeia completa do firmware normal
+                             (conferência no boot, ciclos por bloco e o laço dos LEDs);
                              pacote_serial.c/.h, o formato do pacote da serial;
                              texto_fixo.c/.h, float em texto sem o %f)
 tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL e
@@ -237,7 +242,7 @@ Todos os estágios estão portados: a escala, a janela, o espectro (FFT real de 
 
 **O harness pega os erros clássicos destes blocos.** Testado com o código estragado de propósito: `log10f` no lugar do `logf`, a DCT sem a escala ortonormal, a DCT sem o c0 e o desvio amostral (`ddof = 1`) reprovam com erro de 100 a 10⁷ vezes a tolerância. O épsilon como piso (`max(mel, 1e-10)`) passaria, porque nenhum quadro das referências tem Mel tão pequeno; quem o pega é o `test_log_dct`.
 
-**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia inteira usa cerca de 11 KB de RAM, **todos estáticos** (10,8 KB no `mfcc_estagios.c`: a janela, os buffers da FFT, os 479 pesos do Mel, a matriz da DCT e os buffers de um quadro do `mfcc_quadro_coefs()`), e por isso entram na conta de RAM que o linker imprime. A pilha do `mfcc_segmento()` fica em ~0,3 KB (medida com `-fstack-usage` no Cortex-M4). Os buffers de um quadro são estáticos de propósito: o linker só reserva 1 KB de pilha (`_Min_Stack_Size`), e 2,4 KB na pilha passariam dessa reserva sem nenhum aviso. Com a cadeia e o `lda_escore()` ligados ao firmware, a RAM vai a ~18 KB e o código a mais na flash é de cerca de 2 KB, dos quais ~0,6 KB são o `logf`. As funções não são reentrantes (buffers estáticos): chame a cadeia de um só contexto. O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
+**Um quadro por vez.** Os estágios trabalham com um quadro de 320 amostras de cada vez, e a média e o desvio são acumulados quadro a quadro (`mfcc_resumo_acumular`), porque o segmento inteiro não cabe na RAM da F411 (128 KB): os 98 quadros janelados ocupariam 125 KB, e o espectro de todos, mais 100 KB. Assim, a cadeia inteira usa cerca de 11 KB de RAM, **todos estáticos** (10,8 KB no `mfcc_estagios.c`: a janela, os buffers da FFT, os 479 pesos do Mel, a matriz da DCT e os buffers de um quadro do `mfcc_quadro_coefs()`), e por isso entram na conta de RAM que o linker imprime. A pilha do `mfcc_segmento()` fica em ~0,3 KB (medida com `-fstack-usage` no Cortex-M4). Os buffers de um quadro são estáticos de propósito: o linker só reserva 4 KB de pilha (`_Min_Stack_Size`; era 1 KB até 20/10), não avisa se a pilha real passar disso, e 2,4 KB na pilha comeriam boa parte dessa reserva. Com a cadeia e o `lda_escore()` ligados ao firmware, a RAM vai a ~18 KB e o código a mais na flash é de cerca de 2 KB, dos quais ~0,6 KB são o `logf`. As funções não são reentrantes (buffers estáticos): chame a cadeia de um só contexto. O laço da placa está no comentário do `Core/Inc/mfcc_estagios.h`. O áudio pode ficar na flash, no caso de clipes gravados, ou num buffer circular de 320 amostras `int16`, no caso de áudio ao vivo. O harness faz o mesmo laço e só junta os quadros em buffers grandes, no PC, para comparar com a referência do segmento.
 
 **Banco de Mel esparso.** Os 20 triângulos guardam só os pesos não nulos: o filtro `m` começa no bin `l` e tem `r − l` pesos, num vetor único de 479 floats (1,9 KB), em vez da matriz densa 20 × 257 (20 KB). As 22 bordas são constantes copiadas do contrato ("Valores exatos para conferir"); o `test_mel_bordas` (compilado com o harness) as recalcula pela fórmula HTK em float64 e confere, e falha se algum filtro ficar degenerado:
 
@@ -375,7 +380,7 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 | 9 | código de novidade | `0`–`4` | 0 = não adotado (também no D4); 1 = pente, série BPFO; 2 = pente, série BPFI; 3 = D2 (Mahalanobis² no MFCC); 4 = D3 (Mahalanobis² no MFCC + pente) |
 | 10 | pontuação de novidade | 3 casas ou vazio | vazio com código 0. Em dB no pente, Mahalanobis² no D2/D3 |
 | 11 | limiar de novidade | 3 casas ou vazio | vazio com código 0. **Falha se pontuação > limiar** (estritamente maior) |
-| 12 | ciclos | inteiro | ciclos do DWT do processamento do segmento. Hoje, na origem `R`, são só os do `lda_escore()`; com a cadeia completa, vão do `int16` até a decisão |
+| 12 | ciclos | inteiro | ciclos do DWT do processamento do segmento. Na origem `C`, do `int16` ao escore (`mfcc_segmento()` e `lda_escore()`); na origem `R` (marco), só os do `lda_escore()` |
 
 **Sentidos das comparações.** A LDA dá falha com escore **≥ 0** e o detector de novidade com pontuação **> limiar**, os mesmos sentidos do Python. A placa decide pelo `float`. **No escore da LDA, o sinal do texto é sempre o da decisão:** todo escore negativo sai com `-`, inclusive o que arredonda a zero (−0,0004 sai `-0.000`, decisão `N`). O `-0.0f` não é negativo (`-0.0f < 0` é falso), então sai `0.000` e é falha, como no `lda_e_falha()`. Assim, o painel pode ler a decisão da LDA pelo sinal do texto, sem exceção na fronteira; em Python, use o sinal da string, porque `float("-0.000") >= 0` é verdadeiro. O formatador do marco (`texto_fixo()`) continua sem `-0.000`; o `-` é posto só no `pacote_linha()`. Na novidade (campos reservados), quando a pontuação e o limiar arredondam para o mesmo valor, vale o campo de decisão.
 
@@ -410,6 +415,92 @@ python3 tests/host/pacote/ler_pacotes.py --porta /dev/ttyUSB0 --segundos 30 --sa
 
 Aperte o RESET da placa logo depois, para pegar também o `$CAB`. Com `--csv arquivo.csv`, os segmentos são gravados em CSV. Feche o picocom antes: só um programa abre a serial por vez.
 
+## Cadeia completa na placa
+
+Card "Portar a cadeia de DSP para C — integração da cadeia completa na placa". O `Core/Src/cadeia_clipes.c` liga a cadeia validada ao firmware normal, sem opção de CMake:
+
+```
+clipes[c].pcm → mfcc_segmento() → lda_escore() → decisão → LEDs e $SEG (origem C)
+```
+
+**No boot**, depois do marco, o `cadeia_verificar()` roda a cadeia nos 10 segmentos dos clipes e manda uma linha por segmento:
+
+```
+cadeia inicio modelo=exp239 json=ee0c3e088366 segmentos=10 origem=C clock=100MHz
+cadeia seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=... blocos=janela:...,espectro:...,mel:...,log:...,dct:...,resumo:...,final:...,lda:... soma=... iguais=1
+...
+cadeia resumo ok=10/10 decisoes_iguais=10/10 iguais_blocos=10/10 dif_max=... (seg ...) dif/tol_max=...% ciclos min=... med=... max=... (med ... ms, max ... ms)
+cadeia blocos_mediana janela=... espectro=... mel=... log=... dct=... resumo=... final=... lda=... soma=... (... ms)
+CADEIA OK
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+```
+
+- **`ciclos`:** o `mfcc_segmento()` e o `lda_escore()` juntos, do `int16` ao escore, numa chamada, descontado o custo de ler o DWT. É o tempo do firmware.
+- **`blocos`:** uma segunda passada no mesmo segmento, com os estágios chamados um a um, na ordem do `mfcc_quadro_coefs()`, e cada um medido em cada um dos 98 quadros (somados no segmento). `janela` é a escala e a Hann; `resumo` é o Welford quadro a quadro; `final` é a média e o desvio no fim do segmento; `lda` é o escore. A `soma` fica ~0,5 % abaixo de `ciclos`, porque as medidas não incluem o laço dos quadros nem as chamadas entre os estágios (o `mfcc_quadro_coefs()` e a volta do laço do `mfcc_segmento()`). `iguais=1` diz que essa passada deu bit a bit as mesmas 26 características que o `mfcc_segmento()`; ele aparece no resumo, mas não reprova. A passada de medida custa ~2,9 KB de RAM (os buffers de um quadro, o resumo e os ciclos dos 10 segmentos) e ~0,6 s de boot. Fica ligada em todo boot, sem opção de CMake, porque os ciclos por bloco são o insumo da caracterização de tempo de novembro e a RAM tem ~99 KiB livres; se a RAM apertar (por exemplo, com o detector de novidade), ela é a primeira candidata a ir para uma opção como o `VALIDACAO_PLACA`.
+- **Passa** quando o escore fica a até `1e-5 × |ref|` do `escores_referencia.csv` (tolerância encadeada do escore no A4) e a decisão é a do CSV. Se algum segmento falha, o laço dos LEDs mostra o padrão de erro.
+- **O `$CAB` vem de novo** logo antes dos `$SEG` de origem `C`, para a demonstração não depender do `$CAB` do marco.
+
+**No laço**, o `cadeia_passo()` mostra os 10 segmentos em ordem, 2 s cada, rodando a cadeia de novo em cada um (é uma inferência de verdade, não um valor guardado), com a linha `demo ...` e o `$SEG` de origem `C`, clipe = índice do clipe e segmento = índice dentro do clipe:
+
+```
+demo seg=88 clipe=bpfi_0.3mm k=0 ref=1361.836 placa=1361.836 dif=... tol=0.013618 dec=falha OK ciclos=...
+$SEG,1,2,C,1,0,F,1,1361.836,0,,,...*HH
+```
+
+**Testar no PC** (compilado com o harness; com a CMSIS-DSP genérica, os ciclos viram nanossegundos do PC):
+
+```bash
+cmake -S tests/host/harness -B build/harness -G Ninja && cmake --build build/harness
+./build/harness/test_cadeia_clipes > build/cadeia_pc.txt      # TEST CADEIA OK, na saída de erro
+python3 tests/host/pacote/ler_pacotes.py --arquivo build/cadeia_pc.txt --resumo
+```
+
+O teste confere os 10 segmentos, a passada bloco a bloco igual à do `mfcc_segmento()`, o pacote de origem `C` e que a comparação reprova quando deve (escore a 2 tolerâncias, sinal trocado, NaN, empate em zero).
+
+**Na placa** (build padrão, sem opção):
+
+```bash
+cmake --preset Debug -DBLOCOS13=OFF -DVALIDACAO_PLACA=OFF -DORCAMENTO=OFF   # limpa o que ficou no cache
+cmake --build --preset Debug          # e gravar
+picocom -b 115200 /dev/ttyUSB0 --logfile build/cadeia_placa.txt   # RESET; esperar uns 3 ciclos da demo
+python3 tests/host/pacote/ler_pacotes.py --arquivo build/cadeia_placa.txt --resumo
+```
+
+### Resultado na placa
+
+Captura de 19/10 (build Debug padrão), versionada em [`docs/cadeia-placa-19-10.log`](docs/cadeia-placa-19-10.log), do `hello frente1` ao último `$SEG`. O resumo dos pacotes sai de novo com:
+
+```bash
+python3 tests/host/pacote/ler_pacotes.py --arquivo docs/cadeia-placa-19-10.log --resumo
+```
+
+As linhas da cadeia na captura:
+
+```
+cadeia resumo ok=10/10 decisoes_iguais=10/10 iguais_blocos=10/10 dif_max=0.000854 (seg 148) dif/tol_max=6.0% ciclos min=6144384 med=6145466 max=6147497 (med 61.45 ms, max 61.47 ms)
+cadeia blocos_mediana janela=1051171 espectro=3992168 mel=472774 log=296495 dct=254779 resumo=49196 final=646 lda=245 soma=6117474 (61.17 ms)
+CADEIA OK
+```
+
+| Bloco | Ciclos por segmento de 1 s (mediana dos 10) | ms a 100 MHz | % do segmento |
+|---|---:|---:|---:|
+| janela (escala e Hann) | 1.051.171 | 10,51 | 17,1 % |
+| espectro (FFT e potência) | 3.992.168 | 39,92 | 65,0 % |
+| Mel | 472.774 | 4,73 | 7,7 % |
+| log | 296.495 | 2,96 | 4,8 % |
+| DCT | 254.779 | 2,55 | 4,1 % |
+| resumo (Welford, 98 quadros) | 49.196 | 0,49 | 0,8 % |
+| média e desvio (fim do segmento) | 646 | 0,006 | < 0,1 % |
+| LDA | 245 | 0,002 | < 0,1 % |
+| soma dos blocos | 6.117.474 | 61,17 | 99,5 % |
+| **segmento inteiro (`ciclos`, uma chamada)** | **6.145.466** | **61,45** | 100 % |
+
+- **Escore:** 10/10 dentro da tolerância e com as decisões do CSV; pior caso 6,0 % da tolerância (`bpfi_1.0mm_seg0148`, diferença de 0,0009). A passada de medida deu bit a bit as mesmas 26 características nos 10 segmentos (`iguais_blocos=10/10`).
+- **Tempo:** 61,45 ms por segundo de áudio, ou **6,1 % do tempo real**, com variação de 0,05 % entre segmentos. É o mesmo número da validação do segmento completo (6,145 M ciclos, 19/10).
+- **A FFT domina:** espectro e janela somam 82 % do segmento. Os blocos 1 a 3 batem com o `blocos13` (10.723, 40.632 e 4.830 ciclos por quadro, × 98).
+- **Blocos 4 a 6 medidos:** 6,01 ms juntos (antes, ~6,4 ms por diferença). O log é o mais caro deles: 1.960 `logf` por segmento, ~151 ciclos cada. A DCT custa ~2.600 ciclos por quadro (13 produtos de 20 termos).
+- **Demonstração:** 39 pacotes `$SEG` de origem `C` seguidos, com as decisões do CSV; o `ler_pacotes.py` deu 0 descartados e 0 perdidos. O marco continua `MARCO OK` (295/295) no mesmo boot.
+
 ## Validação bloco a bloco
 
 A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
@@ -421,12 +512,14 @@ A validação independente da cadeia em C (card "Validar cada bloco da cadeia em
 | FFT real de 512 pontos (float32), medida com o contador DWT | 35.677 ciclos = 356,8 µs a 100 MHz |
 | Blocos 1 a 3 por quadro (janela, espectro e Mel), DWT, mediana dos 490 quadros | 56.240 ciclos = 562 µs (janela 10.723, espectro 40.632, Mel 4.830) |
 | Blocos 1 a 3 no segmento de 1 s (98 quadros), DWT, mediana dos 5 segmentos | 5.509.208 ciclos = 55,1 ms (5,5 % do tempo real) |
-| Flash usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
-| RAM usada (firmware atual, Debug, sem o teste dos blocos 1 a 3) | 7.216 B de 128 KB (5,5 %) |
+| Flash usada (firmware até 19/10, Debug, sem o teste dos blocos 1 a 3) | 60.812 B de 512 KB (11,6 %) |
+| RAM usada (firmware até 19/10, Debug, sem o teste dos blocos 1 a 3) | 7.216 B de 128 KB (5,5 %) |
 | Flash e RAM com a cadeia (`mfcc_segmento()`) e o `lda_escore()` ligados, sem o teste dos blocos 1 a 3 | ~62,7 KB de flash sem contar o áudio (os 5 clipes de 2 s somam 256 KB) e 18.000 B de RAM (13,7 %) |
-| Firmware final medido no build de medida: cadeia, LDA, 5 clipes, recorte de 51,2 kHz e buffers da decimação no link (seção "Orçamento medido") | 427.152 B de flash (81,5 %) e 23.216 B de RAM (17,7 %) |
+| Firmware final medido no build de medida: cadeia completa, LDA, 5 clipes, recorte de 51,2 kHz e buffers da decimação no link (seção "Orçamento medido") | 432.460 B de flash (82,5 %) e 29.728 B de RAM (22,7 %), em 20/10 |
+| Build padrão com a cadeia completa ligada: clipes, cadeia, LDA e o `cadeia_clipes.c`, sem o recorte nem a decimação | 328.472 B de flash (62,7 %) e 24.520 B de RAM (18,7 %), com a pilha de 4 KB (20/10); 256.215 B da flash são os clipes. O build capturado na placa em 19/10, com a pilha de 1 KB, tinha 328.480 B e 21.896 B |
+| Segmento de 1 s na placa, do `int16` ao escore (`cadeia resumo`, mediana dos 10) | 6.145.466 ciclos = 61,45 ms (6,1 % do tempo real); blocos na seção "Cadeia completa na placa" |
 
-As duas primeiras linhas são o build padrão de hoje: ele ainda não chama o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
+As linhas "firmware até 19/10" são o build padrão antes da integração da cadeia completa: ele ainda não chamava o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
 
 Um quadro de 320 amostras a 12,8 kHz dura 25 ms; a FFT ocupa cerca de 1,5% desse tempo.
 
@@ -444,29 +537,35 @@ python3 tools/orcamento_memoria.py build/Debug/frente1.map
 
 O valor fica no cache do build, como o do `BLOCOS13`; volte com `-DORCAMENTO=OFF`. O script lê o `.map` e soma as seções de entrada pela parte do firmware a que elas pertencem, contando pelo endereço, porque as strings mescladas pelo linker aparecem no `.map` com o tamanho de antes da mescla. Ele só usa a biblioteca padrão do Python. O total pode diferir em alguns bytes do relatório do linker, que conta também os vãos de alinhamento entre seções.
 
-Resultado em 18/10 (build Debug, com o `main` depois dos blocos 4 a 6):
+Resultado em 20/10 (build Debug com gcc 13.2.1, branch da cadeia completa, depois do pacote da serial e da pilha de 4 KB). É a saída do `tools/orcamento_memoria.py`:
 
 | Parte | Flash (B) | RAM (B) |
 |---|---:|---:|
-| clipes a 12,8 kHz (5 clipes de 2 s) | 256.215 | 0 |
-| recorte a 51,2 kHz (1 s, com as margens) | 103.284 | 0 |
-| cadeia (MFCC) | 1.276 | 10.788 |
-| decimação (buffers; a `arm_fir_decimate_f32` está na linha da CMSIS-DSP) | 0 | 5.204 |
-| build de medida (`orcamento.c`; não vai para o firmware final) | 516 | 8 |
-| marco e LDA (com os vetores de teste do marco) | 36.502 | 2 |
-| CMSIS-DSP (com a `arm_fir_decimate_f32` e o init dela, +284 B em relação ao build padrão) | 11.460 | 0 |
+| clipes a 12,8 kHz | 256.215 | 0 |
+| recorte a 51,2 kHz | 103.284 | 0 |
+| cadeia (MFCC) | 1.432 | 10.788 |
+| cadeia completa na placa (cadeia_clipes.c) | 3.443 | 3.446 |
+| decimacao (buffers; a funcao esta na CMSIS-DSP) | 0 | 5.204 |
+| build de medida (orcamento.c; nao vai para o firmware final) | 516 | 8 |
+| marco e LDA | 36.460 | 0 |
+| pacote da serial | 1.398 | 0 |
+| CMSIS-DSP | 11.460 | 0 |
 | HAL e CubeMX | 6.025 | 13 |
-| aplicação base (inclui a FFT de teste da Frente 1) | 2.172 | 5.220 |
-| biblioteca C | 9.528 | 408 |
-| alinhamento e outros | 174 | 33 |
-| reserva de heap e pilha (linker script) | 0 | 1.540 |
-| **total** | **427.152** (81,5 %) | **23.216** (17,7 %) |
+| aplicacao base | 2.196 | 5.220 |
+| biblioteca C | 9.856 | 408 |
+| alinhamento | 31 | 5 |
+| outros | 144 | 28 |
+| reserva de heap e pilha (linker script: heap 512 B, pilha 4.096 B) | 0 | 4.608 |
+| **total** | **432.460** | **29.728** |
 
-- **Flash:** sobram 97.136 B (94,9 KiB). O áudio ocupa 359.499 B. O resto do firmware ocupa 67.653 B, um pouco acima da reserva de 64 KB do orçamento. Desse total, 516 B são o código do próprio build de medida, que não vai para o firmware final, e 34.250 B são os vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`. Os 94,9 KiB livres equivalem a ~3,8 s a mais de áudio a 12,8 kHz, e são também o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado.
-- **RAM:** sobram 107.856 B (105,3 KiB). Com os ~40 KB do detector de novidade, ainda sobrariam ~65 KiB. Dos 5.220 B da aplicação base, 3.072 B são os buffers da FFT de teste da Frente 1 (`fft_in` e `fft_mag` no `main.c`), que também podem sair do firmware final.
-- **Pilha:** a reserva do linker é só o mínimo (1.024 B), e o linker não avisa se a pilha real passar dela. A cadeia usa ~0,3 KB de pilha (medida pela Amanda com `-fstack-usage`), então cabe. A RAM livre é o espaço para onde a pilha pode crescer.
+- **Flash:** 432.460 B (82,5 %); sobram 91.828 B (89,7 KiB), ~3,6 s a mais de áudio a 12,8 kHz ou o teto para as tabelas da FFT de 4.096 pontos, se o pente for adotado. O áudio ocupa 359.499 B. O resto do firmware ocupa 72.961 B, **~9 KB acima da reserva de 64 KB** do orçamento. A maior folga para recuperar são os 34.250 B dos vetores de teste do marco (`lda_vetores_teste.h`), que podem sair do firmware final ou encolher com `--por-gravacao K`; os 516 B do `orcamento.c` não vão para o firmware final.
+- **RAM:** 29.728 B (22,7 %); sobram 101.344 B (99,0 KiB). Com os ~40 KB do detector de novidade, ainda sobrariam ~59 KiB. Dos 5.220 B da aplicação base, 3.072 B são os buffers da FFT de teste da Frente 1 (`fft_in` e `fft_mag` no `main.c`), que também podem sair do firmware final.
+- **Pilha (4 KB desde 20/10):** a cadeia sozinha usa ~0,3 KB, mas a verificação que roda em todo boot chega a ~1,05 KB no caminho mais fundo: `main` → `cadeia_verificar_com()` → `cadeia_linha()` → `vsnprintf` da newlib nano, mais uma interrupção com o contexto da FPU empilhado (estimativa da Amanda na revisão do PR #8, conferida com o `-fstack-usage` e os prólogos das funções da biblioteca no `.elf`). Isso passava da reserva de 1 KB. Na placa não dava erro, porque a reserva não limita a pilha (ela cresce para a RAM livre); ela só faz o linker recusar um firmware em que não sobre aquele espaço, e o `_sbrk()` não deixar o heap entrar nele. Com 4 KB (no `.ioc` e nos três `.ld`), a conta do linker volta a valer, com folga.
+- **Histórico:** em 18/10, antes do pacote da serial e da cadeia completa, o mesmo build dava 427.152 B de flash e 23.216 B de RAM (pilha de 1 KB).
 
 ## Próximos passos
 
 - **Marco de 13/10:** a placa recebe as 26 características de referência de alguns segmentos, calcula o escore com o `.h` da LDA, confere com o `escores_referencia.csv`, acende o LED e manda o resultado pela serial.
 - **13 a 19/10:** porte da cadeia de DSP (janela, FFT, MFCC) para C, com verificação bloco a bloco contra as referências em Python, e definição do formato do pacote da serial.
+- **19/10:** cadeia completa no firmware normal (clipes → MFCC → LDA → LEDs e `$SEG` de origem `C`), com os ciclos de cada bloco na placa.
+- **Depois:** a decimação embarcada (bloco 0) sobre o recorte de 51,2 kHz, e a primeira inferência on-device (27/10).
