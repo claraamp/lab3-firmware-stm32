@@ -33,6 +33,12 @@ static const char *const NOME_BLOCO[CADEIA_N_BLOCOS] = {
 /* Custo de ler o contador, medido no cadeia_verificar_com() e usado no laco. */
 static uint32_t custo_leitura_dwt = 0u;
 
+/* Um buffer de texto so para o modulo: a verificacao do boot, o $CAB e o laco nunca
+ * escrevem ao mesmo tempo (um so contexto, sem interrupcao). Estatico, e nao na
+ * pilha. (Os parametros `linha` do acrescentar() e do enviar_linha() sao outros.) */
+static char linha[320];
+_Static_assert(sizeof linha >= PACOTE_TAM_MAX, "o $SEG e o $CAB tem que caber no buffer");
+
 uint16_t cadeia_n_segmentos(void) { return CLIPES_N_SEGMENTOS; }
 
 const char *cadeia_nome_bloco(int b)
@@ -98,7 +104,8 @@ int cadeia_inferir(uint16_t s, cadeia_ciclos_fn ciclos, uint32_t custo, cadeia_r
 }
 
 /* Buffers de um quadro da passada bloco a bloco: estaticos (2,4 KB), pelo mesmo
- * motivo dos do mfcc_estagios.c (o linker so reserva 1 KB de pilha). */
+ * motivo dos do mfcc_estagios.c (o linker so reserva 4 KB de pilha e nao avisa
+ * se a pilha real passar disso). */
 static float b_quadro[MFCC_N_QUADRO];
 static float b_potencia[MFCC_N_BINS];
 static float b_mel[MFCC_N_MEL];
@@ -128,8 +135,9 @@ int cadeia_avaliar(uint16_t s, cadeia_ciclos_fn ciclos, uint32_t custo, cadeia_r
      * chamados um a um, na mesma ordem, para medir cada bloco. */
     const int16_t *pcm = pcm_segmento(s, NULL);
     uint32_t *b = r->blocos;
-    /* estaticos: a pilha deste caminho (verificacao -> avaliar -> mfcc_segmento)
-     * fica abaixo do 1 KB que o linker reserva */
+    /* estaticos, e nao na pilha: o caminho mais fundo do boot (verificacao ->
+     * cadeia_linha -> vsnprintf, mais uma interrupcao com o contexto da FPU) ja
+     * chega a ~1,05 KB; por isso a reserva da pilha subiu para 4 KB em 20/10 */
     static mfcc_resumo_t res;
     static float x[2 * MFCC_N_COEFS];
     float escore = 0.0f;
@@ -258,8 +266,7 @@ static void enviar_linha(cadeia_enviar_fn enviar, const char *linha, int len, si
 
 int cadeia_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, uint32_t clock_hz)
 {
-    /* estaticos, e nao na pilha (1 KB de reserva) */
-    static char linha[320];
+    /* estaticos, e nao na pilha (a linha e a do modulo) */
     static uint32_t tot[CLIPES_N_SEGMENTOS];
     static uint32_t por_bloco[CADEIA_N_BLOCOS][CLIPES_N_SEGMENTOS];
     int len;
@@ -403,7 +410,6 @@ int cadeia_verificar(void)
 
     /* $CAB de novo, logo antes dos $SEG de origem C: o painel confere o modelo dos
      * clipes, e a demonstracao nao depende do $CAB do marco */
-    static char linha[PACOTE_TAM_MAX];
     const int len = pacote_cabecalho(linha, sizeof linha, CLIPES_MODELO_ID, CLIPES_JSON_SHA256_12,
                                      (unsigned)LDA_N_FEATURES,
                                      (unsigned)(SystemCoreClock / 1000000u));
@@ -417,7 +423,6 @@ void cadeia_passo(int ok)
 {
     static uint16_t s = 0u;
     static uint32_t n_pacotes = 0u;
-    static char linha[320];
 
     if (!ok) {
         piscar_erro();

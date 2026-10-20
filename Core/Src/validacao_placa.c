@@ -43,8 +43,8 @@ acrescentar(char *linha, size_t tam, int n, const char *fmt, ...)
 
 int validacao_placa_rodar(val_enviar_fn enviar, val_ciclos_fn ciclos, uint32_t clock_hz)
 {
-    /* estatico, e nao na pilha: o linker so reserva 1 KB de pilha (_Min_Stack_Size),
-     * e a linha somada ao mfcc_segmento() e ao snprintf passaria disso sem aviso */
+    /* estatico, e nao na pilha: o linker so reserva 4 KB de pilha (_Min_Stack_Size)
+     * e nao avisa se a pilha real passar disso */
     static char linha[384];
     int n;
 
