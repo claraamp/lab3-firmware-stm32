@@ -86,10 +86,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # clipes de audio da Frente 3C (clipes_demo.h, gerado no repositorio do Python);
     # o que nenhum .c usa sai no link pelo --gc-sections
     Core/Src/clipes_demo.c
+    # cadeia completa na placa (20/10): os clipes passam pelo mfcc_segmento() e pelo
+    # lda_escore() no boot (conferencia com o CSV e ciclos por bloco) e no laco dos LEDs
+    Core/Src/cadeia_clipes.c
 )
-# Marco de 13/10 (LDA na placa) e estagios do MFCC: sempre otimizados, inclusive
-# no Debug, para o tempo medido pelo DWT ser o do firmware final, como o CMSIS-DSP
-set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c
+# Marco de 13/10 (LDA na placa), estagios do MFCC e a cadeia completa: sempre
+# otimizados, inclusive no Debug, para o tempo medido pelo DWT ser o do firmware
+# final, como o CMSIS-DSP
+set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c Core/Src/cadeia_clipes.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Teste dos blocos 1 a 3 na placa (janela, espectro e Mel; Core/Src/blocos13.c):

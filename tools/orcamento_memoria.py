@@ -40,6 +40,7 @@ FLASH_E_RAM = {".data"}
 SO_RAM = {".bss", "._user_heap_stack"}
 
 ORDEM = ["clipes a 12,8 kHz", "recorte a 51,2 kHz", "cadeia (MFCC)",
+         "cadeia completa na placa (cadeia_clipes.c)",
          "decimacao (buffers; a funcao esta na CMSIS-DSP)",
          "build de medida (orcamento.c; nao vai para o firmware final)",
          "marco e LDA", "pacote da serial", "teste dos blocos 1 a 3", "CMSIS-DSP",
@@ -52,6 +53,8 @@ def parte(arquivo: str, secao: str) -> str:
         return "recorte a 51,2 kHz" if "recorte" in secao else "clipes a 12,8 kHz"
     if "mfcc_estagios.c" in a:
         return "cadeia (MFCC)"
+    if "cadeia_clipes.c" in a:
+        return "cadeia completa na placa (cadeia_clipes.c)"
     if "orcamento.c" in a:
         # Os buffers da decimacao (decimador*) sao o que o firmware final vai
         # ter; o resto do orcamento.c (o codigo que so toca em tudo e as duas
@@ -249,8 +252,9 @@ def main():
         print(f"\nAVISO: a soma das partes (flash {soma_f}, RAM {soma_r + heap_pilha}) nao bate com os "
               f"totais das secoes ({flash}, {ram}); alguma linha do .map nao foi reconhecida.")
     if "orcamento.c" not in args.map.read_text(errors="replace"):
-        print("\nAVISO: este build nao tem o orcamento.c: a cadeia, os clipes e a decimacao podem ter "
-              "saido do link. Para o firmware final, compile com -DORCAMENTO=ON.")
+        print("\nAVISO: este build nao tem o orcamento.c: o recorte de 51,2 kHz e a decimacao ficam "
+              "fora do link (a cadeia e os clipes ja entram no build padrao desde a integracao da "
+              "cadeia completa). Para o orcamento do firmware final, compile com -DORCAMENTO=ON.")
     if args.markdown:
         args.markdown.parent.mkdir(parents=True, exist_ok=True)
         args.markdown.write_text(texto + "\n")
