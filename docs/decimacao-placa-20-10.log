@@ -336,3 +336,352 @@ demo seg=148 clipe=bpfi_1.0mm k=1 ref=1425.165 placa=1425.165 dif=0.000854 tol=0
 $SEG,1,5,C,2,1,F,1,1425.165,0,,,6219509*7C
 demo seg=206 clipe=bpfo_0.3mm k=0 ref=1492.375 placa=1492.374 dif=0.000122 tol=0.014924 dec=falha OK ciclos=6216795
 $SEG,1,6,C,3,0,F,1,1492.374,0,,,6216795*79
+decim saida n=12800/12837 saturadas=0 quadros=98 max_lsb=0.500092 (j=6240) tol=0.555330 pico=5533 dif_int16_max=1 n_dif=7 iguais=1 crc32=E4DD7E31 crc32_ref=D10BB565 OK
+decim ciclos total=17453346 (174.53 ms, 17.5% do tempo real) decimacao=11602669 (116.03 ms, 11.6%) fir=10210468 (102.10 ms) resto=1392201 (13.92 ms) cadeia=5850677 (58.51 ms)
+decim escore ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal igual_clipe=0 OK
+DECIMACAO OK duracao=350.41 ms
+demo seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=5862062
+$SEG,1,0,C,0,0,N,0,-1331.768,0,,,5862062*5A
+demo seg=30 clipe=normal k=1 ref=-1392.133 placa=-1392.132 dif=0.000244 tol=0.013921 dec=normal OK ciclos=5861925
+$SEG,1,1,C,0,1,N,0,-1392.132,0,,,5861925*53
+hello frente1
+fft_init status=0
+fft512 ciclos=35753 us=357.5 pico_bin=32 mag=256.0
+marco13 modelo=exp239 json=ee0c3e088366 n_features=26 segmentos=295 clock=100MHz
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+seg seg=0 grav=normal ref=-1577.959 placa=-1577.959 dif=0.000244 tol=0.015775 dec=normal OK ciclos=298
+seg seg=1 grav=normal ref=-1464.036 placa=-1464.036 dif=0.000000 tol=0.015669 dec=normal OK ciclos=295
+seg seg=2 grav=normal ref=-1538.124 placa=-1538.124 dif=0.000122 tol=0.015873 dec=normal OK ciclos=298
+seg seg=3 grav=normal ref=-1463.377 placa=-1463.377 dif=0.000122 tol=0.015548 dec=normal OK ciclos=295
+seg seg=4 grav=normal ref=-1497.349 placa=-1497.349 dif=0.000122 tol=0.015650 dec=normal OK ciclos=298
+seg seg=5 grav=normal ref=-1492.761 placa=-1492.762 dif=0.000244 tol=0.015383 dec=normal OK ciclos=295
+seg seg=6 grav=normal ref=-1462.835 placa=-1462.835 dif=0.000122 tol=0.015601 dec=normal OK ciclos=298
+seg seg=7 grav=normal ref=-1567.226 placa=-1567.226 dif=0.000122 tol=0.015697 dec=normal OK ciclos=295
+seg seg=8 grav=normal ref=-1446.792 placa=-1446.792 dif=0.000000 tol=0.015526 dec=normal OK ciclos=298
+seg seg=9 grav=normal ref=-1434.305 placa=-1434.305 dif=0.000244 tol=0.015450 dec=normal OK ciclos=295
+seg seg=10 grav=normal ref=-1526.927 placa=-1526.927 dif=0.000122 tol=0.015670 dec=normal OK ciclos=298
+seg seg=11 grav=normal ref=-1506.488 placa=-1506.489 dif=0.000244 tol=0.015556 dec=normal OK ciclos=295
+seg seg=12 grav=normal ref=-1462.623 placa=-1462.623 dif=0.000122 tol=0.015447 dec=normal OK ciclos=298
+seg seg=13 grav=normal ref=-1444.661 placa=-1444.661 dif=0.000000 tol=0.015620 dec=normal OK ciclos=295
+seg seg=14 grav=normal ref=-1506.576 placa=-1506.577 dif=0.000122 tol=0.015472 dec=normal OK ciclos=298
+seg seg=15 grav=normal ref=-1419.817 placa=-1419.817 dif=0.000000 tol=0.015585 dec=normal OK ciclos=295
+seg seg=16 grav=normal ref=-1337.250 placa=-1337.250 dif=0.000122 tol=0.015365 dec=normal OK ciclos=298
+seg seg=17 grav=normal ref=-1541.543 placa=-1541.543 dif=0.000122 tol=0.015542 dec=normal OK ciclos=295
+seg seg=18 grav=normal ref=-1465.616 placa=-1465.617 dif=0.000244 tol=0.015434 dec=normal OK ciclos=298
+seg seg=19 grav=normal ref=-1357.207 placa=-1357.207 dif=0.000122 tol=0.015318 dec=normal OK ciclos=295
+seg seg=20 grav=normal ref=-1297.179 placa=-1297.180 dif=0.000244 tol=0.015547 dec=normal OK ciclos=298
+seg seg=21 grav=normal ref=-1307.047 placa=-1307.046 dif=0.000366 tol=0.015399 dec=normal OK ciclos=295
+seg seg=22 grav=normal ref=-1527.254 placa=-1527.253 dif=0.000244 tol=0.015534 dec=normal OK ciclos=298
+seg seg=23 grav=normal ref=-1483.916 placa=-1483.917 dif=0.000244 tol=0.015387 dec=normal OK ciclos=295
+seg seg=24 grav=normal ref=-1538.100 placa=-1538.100 dif=0.000244 tol=0.015361 dec=normal OK ciclos=298
+seg seg=25 grav=normal ref=-1544.765 placa=-1544.765 dif=0.000244 tol=0.015764 dec=normal OK ciclos=295
+seg seg=26 grav=normal ref=-1363.231 placa=-1363.230 dif=0.000122 tol=0.015546 dec=normal OK ciclos=298
+seg seg=27 grav=normal ref=-1385.344 placa=-1385.343 dif=0.000122 tol=0.015499 dec=normal OK ciclos=295
+seg seg=28 grav=normal ref=-1350.029 placa=-1350.029 dif=0.000366 tol=0.015237 dec=normal OK ciclos=298
+seg seg=29 grav=normal ref=-1331.768 placa=-1331.768 dif=0.000244 tol=0.015245 dec=normal OK ciclos=295
+seg seg=30 grav=normal ref=-1392.133 placa=-1392.133 dif=0.000244 tol=0.015404 dec=normal OK ciclos=298
+seg seg=31 grav=normal ref=-1327.172 placa=-1327.173 dif=0.000122 tol=0.015237 dec=normal OK ciclos=295
+seg seg=32 grav=normal ref=-1361.530 placa=-1361.530 dif=0.000244 tol=0.015626 dec=normal OK ciclos=298
+seg seg=33 grav=normal ref=-1340.670 placa=-1340.670 dif=0.000122 tol=0.015329 dec=normal OK ciclos=295
+seg seg=34 grav=normal ref=-1403.465 placa=-1403.464 dif=0.000122 tol=0.015379 dec=normal OK ciclos=298
+seg seg=35 grav=normal ref=-1314.254 placa=-1314.254 dif=0.000000 tol=0.015068 dec=normal OK ciclos=295
+seg seg=36 grav=normal ref=-1471.922 placa=-1471.922 dif=0.000122 tol=0.015503 dec=normal OK ciclos=298
+seg seg=37 grav=normal ref=-1545.464 placa=-1545.464 dif=0.000244 tol=0.015620 dec=normal OK ciclos=295
+seg seg=38 grav=normal ref=-1550.415 placa=-1550.415 dif=0.000122 tol=0.015709 dec=normal OK ciclos=298
+seg seg=39 grav=normal ref=-1311.948 placa=-1311.948 dif=0.000000 tol=0.015180 dec=normal OK ciclos=295
+seg seg=40 grav=normal ref=-1316.309 placa=-1316.309 dif=0.000244 tol=0.015399 dec=normal OK ciclos=298
+seg seg=41 grav=normal ref=-1414.838 placa=-1414.839 dif=0.000244 tol=0.015298 dec=normal OK ciclos=295
+seg seg=42 grav=normal ref=-1424.978 placa=-1424.978 dif=0.000244 tol=0.015661 dec=normal OK ciclos=298
+seg seg=43 grav=normal ref=-1453.461 placa=-1453.461 dif=0.000122 tol=0.015803 dec=normal OK ciclos=295
+seg seg=44 grav=normal ref=-1510.972 placa=-1510.972 dif=0.000122 tol=0.015758 dec=normal OK ciclos=298
+seg seg=45 grav=normal ref=-1499.793 placa=-1499.793 dif=0.000122 tol=0.015620 dec=normal OK ciclos=295
+seg seg=46 grav=normal ref=-1523.543 placa=-1523.544 dif=0.000244 tol=0.015607 dec=normal OK ciclos=298
+seg seg=47 grav=normal ref=-1382.543 placa=-1382.543 dif=0.000122 tol=0.015602 dec=normal OK ciclos=295
+seg seg=48 grav=normal ref=-1554.941 placa=-1554.941 dif=0.000122 tol=0.015714 dec=normal OK ciclos=298
+seg seg=49 grav=normal ref=-1607.837 placa=-1607.837 dif=0.000244 tol=0.015803 dec=normal OK ciclos=295
+seg seg=50 grav=normal ref=-1493.267 placa=-1493.267 dif=0.000122 tol=0.015653 dec=normal OK ciclos=298
+seg seg=51 grav=normal ref=-1544.212 placa=-1544.212 dif=0.000000 tol=0.015953 dec=normal OK ciclos=295
+seg seg=52 grav=normal ref=-1527.368 placa=-1527.368 dif=0.000122 tol=0.015490 dec=normal OK ciclos=298
+seg seg=53 grav=normal ref=-1457.894 placa=-1457.894 dif=0.000122 tol=0.015683 dec=normal OK ciclos=295
+seg seg=54 grav=normal ref=-1531.230 placa=-1531.230 dif=0.000122 tol=0.015513 dec=normal OK ciclos=298
+seg seg=55 grav=normal ref=-1560.632 placa=-1560.632 dif=0.000000 tol=0.015506 dec=normal OK ciclos=295
+seg seg=56 grav=normal ref=-1489.823 placa=-1489.823 dif=0.000122 tol=0.015584 dec=normal OK ciclos=298
+seg seg=57 grav=normal ref=-1511.981 placa=-1511.981 dif=0.000122 tol=0.015742 dec=normal OK ciclos=295
+seg seg=58 grav=normal ref=-1577.979 placa=-1577.979 dif=0.000000 tol=0.015601 dec=normal OK ciclos=298
+seg seg=59 grav=bpfi_0.3mm ref=1395.454 placa=1395.454 dif=0.000000 tol=0.018902 dec=falha OK ciclos=295
+seg seg=60 grav=bpfi_0.3mm ref=1437.226 placa=1437.226 dif=0.000366 tol=0.018612 dec=falha OK ciclos=298
+seg seg=61 grav=bpfi_0.3mm ref=1529.515 placa=1529.515 dif=0.000000 tol=0.018445 dec=falha OK ciclos=295
+seg seg=62 grav=bpfi_0.3mm ref=1530.653 placa=1530.653 dif=0.000122 tol=0.018268 dec=falha OK ciclos=298
+seg seg=63 grav=bpfi_0.3mm ref=1512.278 placa=1512.278 dif=0.000000 tol=0.018523 dec=falha OK ciclos=295
+seg seg=64 grav=bpfi_0.3mm ref=1508.386 placa=1508.386 dif=0.000244 tol=0.018727 dec=falha OK ciclos=298
+seg seg=65 grav=bpfi_0.3mm ref=1464.621 placa=1464.620 dif=0.000366 tol=0.018937 dec=falha OK ciclos=295
+seg seg=66 grav=bpfi_0.3mm ref=1428.283 placa=1428.284 dif=0.000244 tol=0.018697 dec=falha OK ciclos=298
+seg seg=67 grav=bpfi_0.3mm ref=1488.405 placa=1488.405 dif=0.000000 tol=0.018204 dec=falha OK ciclos=295
+seg seg=68 grav=bpfi_0.3mm ref=1431.701 placa=1431.701 dif=0.000244 tol=0.019383 dec=falha OK ciclos=298
+seg seg=69 grav=bpfi_0.3mm ref=1454.704 placa=1454.705 dif=0.000244 tol=0.019696 dec=falha OK ciclos=295
+seg seg=70 grav=bpfi_0.3mm ref=1463.666 placa=1463.666 dif=0.000000 tol=0.019295 dec=falha OK ciclos=298
+seg seg=71 grav=bpfi_0.3mm ref=1405.770 placa=1405.770 dif=0.000122 tol=0.018693 dec=falha OK ciclos=295
+seg seg=72 grav=bpfi_0.3mm ref=1468.472 placa=1468.472 dif=0.000122 tol=0.019054 dec=falha OK ciclos=298
+seg seg=73 grav=bpfi_0.3mm ref=1444.262 placa=1444.262 dif=0.000000 tol=0.018746 dec=falha OK ciclos=295
+seg seg=74 grav=bpfi_0.3mm ref=1508.883 placa=1508.883 dif=0.000000 tol=0.018968 dec=falha OK ciclos=298
+seg seg=75 grav=bpfi_0.3mm ref=1467.336 placa=1467.336 dif=0.000366 tol=0.018826 dec=falha OK ciclos=295
+seg seg=76 grav=bpfi_0.3mm ref=1478.491 placa=1478.491 dif=0.000122 tol=0.019981 dec=falha OK ciclos=298
+seg seg=77 grav=bpfi_0.3mm ref=1458.064 placa=1458.064 dif=0.000122 tol=0.019103 dec=falha OK ciclos=295
+seg seg=78 grav=bpfi_0.3mm ref=1440.020 placa=1440.020 dif=0.000000 tol=0.018623 dec=falha OK ciclos=298
+seg seg=79 grav=bpfi_0.3mm ref=1510.187 placa=1510.187 dif=0.000122 tol=0.018878 dec=falha OK ciclos=295
+seg seg=80 grav=bpfi_0.3mm ref=1412.812 placa=1412.812 dif=0.000122 tol=0.018707 dec=falha OK ciclos=298
+seg seg=81 grav=bpfi_0.3mm ref=1433.038 placa=1433.038 dif=0.000122 tol=0.018902 dec=falha OK ciclos=295
+seg seg=82 grav=bpfi_0.3mm ref=1472.361 placa=1472.361 dif=0.000000 tol=0.018792 dec=falha OK ciclos=298
+seg seg=83 grav=bpfi_0.3mm ref=1435.020 placa=1435.020 dif=0.000000 tol=0.018822 dec=falha OK ciclos=295
+seg seg=84 grav=bpfi_0.3mm ref=1463.045 placa=1463.045 dif=0.000122 tol=0.019203 dec=falha OK ciclos=298
+seg seg=85 grav=bpfi_0.3mm ref=1413.910 placa=1413.910 dif=0.000244 tol=0.018489 dec=falha OK ciclos=295
+seg seg=86 grav=bpfi_0.3mm ref=1502.856 placa=1502.856 dif=0.000122 tol=0.018792 dec=falha OK ciclos=298
+seg seg=87 grav=bpfi_0.3mm ref=1466.728 placa=1466.729 dif=0.000366 tol=0.018533 dec=falha OK ciclos=295
+seg seg=88 grav=bpfi_0.3mm ref=1361.836 placa=1361.836 dif=0.000122 tol=0.019275 dec=falha OK ciclos=298
+seg seg=89 grav=bpfi_0.3mm ref=1477.391 placa=1477.391 dif=0.000244 tol=0.018712 dec=falha OK ciclos=295
+seg seg=90 grav=bpfi_0.3mm ref=1415.631 placa=1415.630 dif=0.000244 tol=0.018959 dec=falha OK ciclos=298
+seg seg=91 grav=bpfi_0.3mm ref=1469.808 placa=1469.808 dif=0.000122 tol=0.018928 dec=falha OK ciclos=295
+seg seg=92 grav=bpfi_0.3mm ref=1439.285 placa=1439.285 dif=0.000000 tol=0.019053 dec=falha OK ciclos=298
+seg seg=93 grav=bpfi_0.3mm ref=1365.113 placa=1365.112 dif=0.000244 tol=0.018731 dec=falha OK ciclos=295
+seg seg=94 grav=bpfi_0.3mm ref=1470.704 placa=1470.705 dif=0.000244 tol=0.018753 dec=falha OK ciclos=298
+seg seg=95 grav=bpfi_0.3mm ref=1436.647 placa=1436.647 dif=0.000244 tol=0.018492 dec=falha OK ciclos=295
+seg seg=96 grav=bpfi_0.3mm ref=1482.994 placa=1482.994 dif=0.000122 tol=0.018349 dec=falha OK ciclos=298
+seg seg=97 grav=bpfi_0.3mm ref=1463.705 placa=1463.705 dif=0.000122 tol=0.018970 dec=falha OK ciclos=295
+seg seg=98 grav=bpfi_0.3mm ref=1455.477 placa=1455.477 dif=0.000000 tol=0.018319 dec=falha OK ciclos=298
+seg seg=99 grav=bpfi_0.3mm ref=1464.514 placa=1464.514 dif=0.000122 tol=0.018788 dec=falha OK ciclos=295
+seg seg=100 grav=bpfi_0.3mm ref=1429.274 placa=1429.275 dif=0.000244 tol=0.018638 dec=falha OK ciclos=298
+seg seg=101 grav=bpfi_0.3mm ref=1488.681 placa=1488.681 dif=0.000244 tol=0.018452 dec=falha OK ciclos=295
+seg seg=102 grav=bpfi_0.3mm ref=1483.753 placa=1483.753 dif=0.000000 tol=0.019045 dec=falha OK ciclos=298
+seg seg=103 grav=bpfi_0.3mm ref=1498.466 placa=1498.466 dif=0.000122 tol=0.017948 dec=falha OK ciclos=295
+seg seg=104 grav=bpfi_0.3mm ref=1444.602 placa=1444.602 dif=0.000366 tol=0.018638 dec=falha OK ciclos=298
+seg seg=105 grav=bpfi_0.3mm ref=1410.135 placa=1410.134 dif=0.000244 tol=0.018880 dec=falha OK ciclos=295
+seg seg=106 grav=bpfi_0.3mm ref=1433.425 placa=1433.425 dif=0.000244 tol=0.018522 dec=falha OK ciclos=298
+seg seg=107 grav=bpfi_0.3mm ref=1395.486 placa=1395.487 dif=0.000488 tol=0.018698 dec=falha OK ciclos=295
+seg seg=108 grav=bpfi_0.3mm ref=1554.017 placa=1554.016 dif=0.000122 tol=0.018690 dec=falha OK ciclos=298
+seg seg=109 grav=bpfi_0.3mm ref=1442.343 placa=1442.343 dif=0.000000 tol=0.018675 dec=falha OK ciclos=295
+seg seg=110 grav=bpfi_0.3mm ref=1443.155 placa=1443.155 dif=0.000122 tol=0.018426 dec=falha OK ciclos=298
+seg seg=111 grav=bpfi_0.3mm ref=1500.313 placa=1500.313 dif=0.000488 tol=0.019175 dec=falha OK ciclos=295
+seg seg=112 grav=bpfi_0.3mm ref=1424.073 placa=1424.073 dif=0.000122 tol=0.018357 dec=falha OK ciclos=298
+seg seg=113 grav=bpfi_0.3mm ref=1496.429 placa=1496.429 dif=0.000122 tol=0.018150 dec=falha OK ciclos=295
+seg seg=114 grav=bpfi_0.3mm ref=1462.433 placa=1462.432 dif=0.000244 tol=0.018586 dec=falha OK ciclos=298
+seg seg=115 grav=bpfi_0.3mm ref=1516.116 placa=1516.116 dif=0.000122 tol=0.018568 dec=falha OK ciclos=295
+seg seg=116 grav=bpfi_0.3mm ref=1541.279 placa=1541.278 dif=0.000122 tol=0.018548 dec=falha OK ciclos=352
+seg seg=117 grav=bpfi_0.3mm ref=1417.029 placa=1417.028 dif=0.000122 tol=0.018328 dec=falha OK ciclos=295
+seg seg=118 grav=bpfi_1.0mm ref=1469.094 placa=1469.094 dif=0.000122 tol=0.021574 dec=falha OK ciclos=298
+seg seg=119 grav=bpfi_1.0mm ref=1436.803 placa=1436.803 dif=0.000244 tol=0.021248 dec=falha OK ciclos=295
+seg seg=120 grav=bpfi_1.0mm ref=1432.293 placa=1432.293 dif=0.000366 tol=0.021638 dec=falha OK ciclos=298
+seg seg=121 grav=bpfi_1.0mm ref=1439.773 placa=1439.772 dif=0.000122 tol=0.021286 dec=falha OK ciclos=295
+seg seg=122 grav=bpfi_1.0mm ref=1464.074 placa=1464.074 dif=0.000000 tol=0.021054 dec=falha OK ciclos=298
+seg seg=123 grav=bpfi_1.0mm ref=1444.792 placa=1444.792 dif=0.000000 tol=0.021652 dec=falha OK ciclos=295
+seg seg=124 grav=bpfi_1.0mm ref=1431.551 placa=1431.551 dif=0.000000 tol=0.021290 dec=falha OK ciclos=298
+seg seg=125 grav=bpfi_1.0mm ref=1499.113 placa=1499.113 dif=0.000244 tol=0.020737 dec=falha OK ciclos=295
+seg seg=126 grav=bpfi_1.0mm ref=1492.982 placa=1492.982 dif=0.000122 tol=0.021142 dec=falha OK ciclos=298
+seg seg=127 grav=bpfi_1.0mm ref=1494.975 placa=1494.975 dif=0.000000 tol=0.020781 dec=falha OK ciclos=295
+seg seg=128 grav=bpfi_1.0mm ref=1450.448 placa=1450.448 dif=0.000122 tol=0.021322 dec=falha OK ciclos=298
+seg seg=129 grav=bpfi_1.0mm ref=1498.885 placa=1498.885 dif=0.000000 tol=0.021316 dec=falha OK ciclos=295
+seg seg=130 grav=bpfi_1.0mm ref=1482.244 placa=1482.244 dif=0.000122 tol=0.021272 dec=falha OK ciclos=298
+seg seg=131 grav=bpfi_1.0mm ref=1498.283 placa=1498.283 dif=0.000122 tol=0.021353 dec=falha OK ciclos=295
+seg seg=132 grav=bpfi_1.0mm ref=1432.047 placa=1432.047 dif=0.000000 tol=0.021732 dec=falha OK ciclos=298
+seg seg=133 grav=bpfi_1.0mm ref=1406.635 placa=1406.635 dif=0.000000 tol=0.021202 dec=falha OK ciclos=295
+seg seg=134 grav=bpfi_1.0mm ref=1475.465 placa=1475.465 dif=0.000122 tol=0.021375 dec=falha OK ciclos=298
+seg seg=135 grav=bpfi_1.0mm ref=1395.255 placa=1395.255 dif=0.000000 tol=0.021476 dec=falha OK ciclos=295
+seg seg=136 grav=bpfi_1.0mm ref=1510.132 placa=1510.132 dif=0.000122 tol=0.021330 dec=falha OK ciclos=298
+seg seg=137 grav=bpfi_1.0mm ref=1497.423 placa=1497.423 dif=0.000122 tol=0.020935 dec=falha OK ciclos=295
+seg seg=138 grav=bpfi_1.0mm ref=1443.393 placa=1443.393 dif=0.000122 tol=0.021154 dec=falha OK ciclos=298
+seg seg=139 grav=bpfi_1.0mm ref=1446.082 placa=1446.082 dif=0.000000 tol=0.021630 dec=falha OK ciclos=295
+seg seg=140 grav=bpfi_1.0mm ref=1400.988 placa=1400.988 dif=0.000488 tol=0.020896 dec=falha OK ciclos=298
+seg seg=141 grav=bpfi_1.0mm ref=1442.961 placa=1442.961 dif=0.000122 tol=0.021347 dec=falha OK ciclos=295
+seg seg=142 grav=bpfi_1.0mm ref=1435.893 placa=1435.893 dif=0.000122 tol=0.021153 dec=falha OK ciclos=298
+seg seg=143 grav=bpfi_1.0mm ref=1391.885 placa=1391.885 dif=0.000000 tol=0.021378 dec=falha OK ciclos=295
+seg seg=144 grav=bpfi_1.0mm ref=1498.972 placa=1498.972 dif=0.000366 tol=0.021110 dec=falha OK ciclos=298
+seg seg=145 grav=bpfi_1.0mm ref=1391.182 placa=1391.182 dif=0.000244 tol=0.021223 dec=falha OK ciclos=295
+seg seg=146 grav=bpfi_1.0mm ref=1453.168 placa=1453.168 dif=0.000244 tol=0.021365 dec=falha OK ciclos=298
+seg seg=147 grav=bpfi_1.0mm ref=1469.799 placa=1469.799 dif=0.000244 tol=0.021147 dec=falha OK ciclos=295
+seg seg=148 grav=bpfi_1.0mm ref=1425.165 placa=1425.165 dif=0.000366 tol=0.021629 dec=falha OK ciclos=298
+seg seg=149 grav=bpfi_1.0mm ref=1458.469 placa=1458.469 dif=0.000000 tol=0.020912 dec=falha OK ciclos=295
+seg seg=150 grav=bpfi_1.0mm ref=1435.876 placa=1435.876 dif=0.000366 tol=0.021488 dec=falha OK ciclos=298
+seg seg=151 grav=bpfi_1.0mm ref=1512.829 placa=1512.829 dif=0.000122 tol=0.020843 dec=falha OK ciclos=295
+seg seg=152 grav=bpfi_1.0mm ref=1491.272 placa=1491.272 dif=0.000244 tol=0.020964 dec=falha OK ciclos=298
+seg seg=153 grav=bpfi_1.0mm ref=1481.145 placa=1481.145 dif=0.000000 tol=0.020919 dec=falha OK ciclos=295
+seg seg=154 grav=bpfi_1.0mm ref=1446.999 placa=1447.000 dif=0.000244 tol=0.021848 dec=falha OK ciclos=298
+seg seg=155 grav=bpfi_1.0mm ref=1395.432 placa=1395.431 dif=0.000366 tol=0.021448 dec=falha OK ciclos=295
+seg seg=156 grav=bpfi_1.0mm ref=1466.436 placa=1466.436 dif=0.000122 tol=0.022031 dec=falha OK ciclos=298
+seg seg=157 grav=bpfi_1.0mm ref=1419.184 placa=1419.184 dif=0.000122 tol=0.020998 dec=falha OK ciclos=295
+seg seg=158 grav=bpfi_1.0mm ref=1472.927 placa=1472.927 dif=0.000122 tol=0.020784 dec=falha OK ciclos=298
+seg seg=159 grav=bpfi_1.0mm ref=1486.085 placa=1486.085 dif=0.000244 tol=0.021142 dec=falha OK ciclos=295
+seg seg=160 grav=bpfi_1.0mm ref=1491.313 placa=1491.313 dif=0.000122 tol=0.021328 dec=falha OK ciclos=298
+seg seg=161 grav=bpfi_1.0mm ref=1492.584 placa=1492.584 dif=0.000000 tol=0.021010 dec=falha OK ciclos=295
+seg seg=162 grav=bpfi_1.0mm ref=1474.008 placa=1474.009 dif=0.000122 tol=0.021428 dec=falha OK ciclos=298
+seg seg=163 grav=bpfi_1.0mm ref=1513.312 placa=1513.312 dif=0.000122 tol=0.022108 dec=falha OK ciclos=295
+seg seg=164 grav=bpfi_1.0mm ref=1512.377 placa=1512.376 dif=0.000366 tol=0.021461 dec=falha OK ciclos=298
+seg seg=165 grav=bpfi_1.0mm ref=1465.888 placa=1465.888 dif=0.000122 tol=0.021786 dec=falha OK ciclos=295
+seg seg=166 grav=bpfi_1.0mm ref=1488.690 placa=1488.690 dif=0.000122 tol=0.021149 dec=falha OK ciclos=298
+seg seg=167 grav=bpfi_1.0mm ref=1396.705 placa=1396.705 dif=0.000122 tol=0.022069 dec=falha OK ciclos=295
+seg seg=168 grav=bpfi_1.0mm ref=1456.665 placa=1456.665 dif=0.000122 tol=0.020971 dec=falha OK ciclos=298
+seg seg=169 grav=bpfi_1.0mm ref=1441.853 placa=1441.853 dif=0.000122 tol=0.021675 dec=falha OK ciclos=295
+seg seg=170 grav=bpfi_1.0mm ref=1429.292 placa=1429.291 dif=0.000122 tol=0.021242 dec=falha OK ciclos=298
+seg seg=171 grav=bpfi_1.0mm ref=1454.636 placa=1454.637 dif=0.000366 tol=0.021358 dec=falha OK ciclos=295
+seg seg=172 grav=bpfi_1.0mm ref=1488.302 placa=1488.302 dif=0.000000 tol=0.021429 dec=falha OK ciclos=298
+seg seg=173 grav=bpfi_1.0mm ref=1509.519 placa=1509.519 dif=0.000244 tol=0.021528 dec=falha OK ciclos=295
+seg seg=174 grav=bpfi_1.0mm ref=1428.140 placa=1428.141 dif=0.000122 tol=0.021326 dec=falha OK ciclos=298
+seg seg=175 grav=bpfi_1.0mm ref=1409.938 placa=1409.938 dif=0.000122 tol=0.020995 dec=falha OK ciclos=295
+seg seg=176 grav=bpfi_1.0mm ref=1550.773 placa=1550.773 dif=0.000122 tol=0.020786 dec=falha OK ciclos=298
+seg seg=177 grav=bpfo_0.3mm ref=1412.338 placa=1412.338 dif=0.000000 tol=0.014403 dec=falha OK ciclos=295
+seg seg=178 grav=bpfo_0.3mm ref=1494.160 placa=1494.160 dif=0.000122 tol=0.014229 dec=falha OK ciclos=298
+seg seg=179 grav=bpfo_0.3mm ref=1487.027 placa=1487.027 dif=0.000122 tol=0.015002 dec=falha OK ciclos=295
+seg seg=180 grav=bpfo_0.3mm ref=1394.437 placa=1394.437 dif=0.000122 tol=0.014676 dec=falha OK ciclos=298
+seg seg=181 grav=bpfo_0.3mm ref=1398.482 placa=1398.482 dif=0.000000 tol=0.015173 dec=falha OK ciclos=295
+seg seg=182 grav=bpfo_0.3mm ref=1476.972 placa=1476.972 dif=0.000122 tol=0.015112 dec=falha OK ciclos=298
+seg seg=183 grav=bpfo_0.3mm ref=1469.106 placa=1469.106 dif=0.000244 tol=0.015017 dec=falha OK ciclos=295
+seg seg=184 grav=bpfo_0.3mm ref=1491.209 placa=1491.209 dif=0.000122 tol=0.015052 dec=falha OK ciclos=298
+seg seg=185 grav=bpfo_0.3mm ref=1410.960 placa=1410.960 dif=0.000122 tol=0.014893 dec=falha OK ciclos=295
+seg seg=186 grav=bpfo_0.3mm ref=1482.399 placa=1482.399 dif=0.000122 tol=0.014937 dec=falha OK ciclos=298
+seg seg=187 grav=bpfo_0.3mm ref=1336.696 placa=1336.696 dif=0.000244 tol=0.014954 dec=falha OK ciclos=295
+seg seg=188 grav=bpfo_0.3mm ref=1478.458 placa=1478.458 dif=0.000000 tol=0.014776 dec=falha OK ciclos=298
+seg seg=189 grav=bpfo_0.3mm ref=1399.367 placa=1399.368 dif=0.000366 tol=0.015239 dec=falha OK ciclos=295
+seg seg=190 grav=bpfo_0.3mm ref=1377.899 placa=1377.899 dif=0.000000 tol=0.014778 dec=falha OK ciclos=298
+seg seg=191 grav=bpfo_0.3mm ref=1465.429 placa=1465.429 dif=0.000244 tol=0.015084 dec=falha OK ciclos=295
+seg seg=192 grav=bpfo_0.3mm ref=1494.584 placa=1494.584 dif=0.000000 tol=0.014772 dec=falha OK ciclos=298
+seg seg=193 grav=bpfo_0.3mm ref=1457.405 placa=1457.404 dif=0.000366 tol=0.014863 dec=falha OK ciclos=295
+seg seg=194 grav=bpfo_0.3mm ref=1531.179 placa=1531.179 dif=0.000244 tol=0.015258 dec=falha OK ciclos=298
+seg seg=195 grav=bpfo_0.3mm ref=1318.395 placa=1318.395 dif=0.000000 tol=0.014586 dec=falha OK ciclos=295
+seg seg=196 grav=bpfo_0.3mm ref=1367.498 placa=1367.499 dif=0.000244 tol=0.015134 dec=falha OK ciclos=298
+seg seg=197 grav=bpfo_0.3mm ref=1411.555 placa=1411.555 dif=0.000122 tol=0.014977 dec=falha OK ciclos=295
+seg seg=198 grav=bpfo_0.3mm ref=1481.213 placa=1481.213 dif=0.000122 tol=0.015073 dec=falha OK ciclos=298
+seg seg=199 grav=bpfo_0.3mm ref=1461.088 placa=1461.088 dif=0.000244 tol=0.015104 dec=falha OK ciclos=295
+seg seg=200 grav=bpfo_0.3mm ref=1391.381 placa=1391.382 dif=0.000122 tol=0.015192 dec=falha OK ciclos=298
+seg seg=201 grav=bpfo_0.3mm ref=1401.676 placa=1401.676 dif=0.000122 tol=0.014636 dec=falha OK ciclos=295
+seg seg=202 grav=bpfo_0.3mm ref=1414.164 placa=1414.164 dif=0.000122 tol=0.014332 dec=falha OK ciclos=298
+seg seg=203 grav=bpfo_0.3mm ref=1394.331 placa=1394.331 dif=0.000000 tol=0.015002 dec=falha OK ciclos=295
+seg seg=204 grav=bpfo_0.3mm ref=1323.062 placa=1323.063 dif=0.000366 tol=0.014238 dec=falha OK ciclos=298
+seg seg=205 grav=bpfo_0.3mm ref=1459.435 placa=1459.434 dif=0.000488 tol=0.015160 dec=falha OK ciclos=295
+seg seg=206 grav=bpfo_0.3mm ref=1492.375 placa=1492.374 dif=0.000366 tol=0.014912 dec=falha OK ciclos=298
+seg seg=207 grav=bpfo_0.3mm ref=1518.178 placa=1518.177 dif=0.000122 tol=0.014913 dec=falha OK ciclos=295
+seg seg=208 grav=bpfo_0.3mm ref=1434.823 placa=1434.823 dif=0.000000 tol=0.015010 dec=falha OK ciclos=298
+seg seg=209 grav=bpfo_0.3mm ref=1568.850 placa=1568.850 dif=0.000000 tol=0.014657 dec=falha OK ciclos=295
+seg seg=210 grav=bpfo_0.3mm ref=1484.496 placa=1484.496 dif=0.000244 tol=0.015226 dec=falha OK ciclos=298
+seg seg=211 grav=bpfo_0.3mm ref=1535.445 placa=1535.444 dif=0.000244 tol=0.014758 dec=falha OK ciclos=295
+seg seg=212 grav=bpfo_0.3mm ref=1503.659 placa=1503.659 dif=0.000122 tol=0.014781 dec=falha OK ciclos=298
+seg seg=213 grav=bpfo_0.3mm ref=1426.971 placa=1426.971 dif=0.000122 tol=0.014850 dec=falha OK ciclos=295
+seg seg=214 grav=bpfo_0.3mm ref=1452.462 placa=1452.462 dif=0.000000 tol=0.014919 dec=falha OK ciclos=298
+seg seg=215 grav=bpfo_0.3mm ref=1476.007 placa=1476.007 dif=0.000122 tol=0.014150 dec=falha OK ciclos=295
+seg seg=216 grav=bpfo_0.3mm ref=1498.544 placa=1498.544 dif=0.000244 tol=0.014993 dec=falha OK ciclos=298
+seg seg=217 grav=bpfo_0.3mm ref=1387.076 placa=1387.076 dif=0.000122 tol=0.014635 dec=falha OK ciclos=295
+seg seg=218 grav=bpfo_0.3mm ref=1497.977 placa=1497.977 dif=0.000000 tol=0.014827 dec=falha OK ciclos=298
+seg seg=219 grav=bpfo_0.3mm ref=1476.322 placa=1476.322 dif=0.000122 tol=0.015236 dec=falha OK ciclos=295
+seg seg=220 grav=bpfo_0.3mm ref=1446.538 placa=1446.538 dif=0.000244 tol=0.014856 dec=falha OK ciclos=298
+seg seg=221 grav=bpfo_0.3mm ref=1453.435 placa=1453.435 dif=0.000122 tol=0.014559 dec=falha OK ciclos=295
+seg seg=222 grav=bpfo_0.3mm ref=1539.165 placa=1539.165 dif=0.000244 tol=0.015102 dec=falha OK ciclos=298
+seg seg=223 grav=bpfo_0.3mm ref=1397.566 placa=1397.566 dif=0.000122 tol=0.014944 dec=falha OK ciclos=295
+seg seg=224 grav=bpfo_0.3mm ref=1454.144 placa=1454.144 dif=0.000122 tol=0.014795 dec=falha OK ciclos=298
+seg seg=225 grav=bpfo_0.3mm ref=1467.467 placa=1467.467 dif=0.000000 tol=0.015377 dec=falha OK ciclos=295
+seg seg=226 grav=bpfo_0.3mm ref=1458.038 placa=1458.038 dif=0.000244 tol=0.015382 dec=falha OK ciclos=298
+seg seg=227 grav=bpfo_0.3mm ref=1543.512 placa=1543.512 dif=0.000244 tol=0.015305 dec=falha OK ciclos=295
+seg seg=228 grav=bpfo_0.3mm ref=1544.278 placa=1544.277 dif=0.000122 tol=0.014972 dec=falha OK ciclos=298
+seg seg=229 grav=bpfo_0.3mm ref=1521.508 placa=1521.508 dif=0.000244 tol=0.014643 dec=falha OK ciclos=295
+seg seg=230 grav=bpfo_0.3mm ref=1376.649 placa=1376.649 dif=0.000000 tol=0.014502 dec=falha OK ciclos=298
+seg seg=231 grav=bpfo_0.3mm ref=1389.909 placa=1389.908 dif=0.000244 tol=0.014771 dec=falha OK ciclos=295
+seg seg=232 grav=bpfo_0.3mm ref=1440.758 placa=1440.758 dif=0.000366 tol=0.014714 dec=falha OK ciclos=298
+seg seg=233 grav=bpfo_0.3mm ref=1488.913 placa=1488.913 dif=0.000122 tol=0.015156 dec=falha OK ciclos=351
+seg seg=234 grav=bpfo_0.3mm ref=1536.721 placa=1536.721 dif=0.000244 tol=0.015129 dec=falha OK ciclos=298
+seg seg=235 grav=bpfo_0.3mm ref=1504.391 placa=1504.391 dif=0.000000 tol=0.014917 dec=falha OK ciclos=295
+seg seg=236 grav=bpfo_1.0mm ref=1444.391 placa=1444.391 dif=0.000244 tol=0.014137 dec=falha OK ciclos=298
+seg seg=237 grav=bpfo_1.0mm ref=1406.019 placa=1406.019 dif=0.000122 tol=0.014333 dec=falha OK ciclos=295
+seg seg=238 grav=bpfo_1.0mm ref=1436.525 placa=1436.525 dif=0.000244 tol=0.014902 dec=falha OK ciclos=298
+seg seg=239 grav=bpfo_1.0mm ref=1474.044 placa=1474.044 dif=0.000000 tol=0.014064 dec=falha OK ciclos=295
+seg seg=240 grav=bpfo_1.0mm ref=1482.978 placa=1482.978 dif=0.000244 tol=0.014492 dec=falha OK ciclos=298
+seg seg=241 grav=bpfo_1.0mm ref=1477.894 placa=1477.894 dif=0.000122 tol=0.014404 dec=falha OK ciclos=295
+seg seg=242 grav=bpfo_1.0mm ref=1406.950 placa=1406.950 dif=0.000122 tol=0.014374 dec=falha OK ciclos=298
+seg seg=243 grav=bpfo_1.0mm ref=1464.300 placa=1464.300 dif=0.000000 tol=0.014397 dec=falha OK ciclos=295
+seg seg=244 grav=bpfo_1.0mm ref=1468.382 placa=1468.382 dif=0.000122 tol=0.014484 dec=falha OK ciclos=298
+seg seg=245 grav=bpfo_1.0mm ref=1474.564 placa=1474.564 dif=0.000000 tol=0.014560 dec=falha OK ciclos=295
+seg seg=246 grav=bpfo_1.0mm ref=1460.560 placa=1460.560 dif=0.000000 tol=0.014526 dec=falha OK ciclos=298
+seg seg=247 grav=bpfo_1.0mm ref=1455.499 placa=1455.499 dif=0.000122 tol=0.014557 dec=falha OK ciclos=295
+seg seg=248 grav=bpfo_1.0mm ref=1493.557 placa=1493.557 dif=0.000122 tol=0.014733 dec=falha OK ciclos=298
+seg seg=249 grav=bpfo_1.0mm ref=1446.381 placa=1446.381 dif=0.000122 tol=0.014599 dec=falha OK ciclos=295
+seg seg=250 grav=bpfo_1.0mm ref=1440.933 placa=1440.933 dif=0.000488 tol=0.015040 dec=falha OK ciclos=298
+seg seg=251 grav=bpfo_1.0mm ref=1492.440 placa=1492.440 dif=0.000122 tol=0.014498 dec=falha OK ciclos=295
+seg seg=252 grav=bpfo_1.0mm ref=1439.021 placa=1439.020 dif=0.000122 tol=0.014649 dec=falha OK ciclos=298
+seg seg=253 grav=bpfo_1.0mm ref=1512.447 placa=1512.447 dif=0.000244 tol=0.014700 dec=falha OK ciclos=295
+seg seg=254 grav=bpfo_1.0mm ref=1483.985 placa=1483.985 dif=0.000122 tol=0.014574 dec=falha OK ciclos=298
+seg seg=255 grav=bpfo_1.0mm ref=1473.496 placa=1473.496 dif=0.000244 tol=0.014345 dec=falha OK ciclos=295
+seg seg=256 grav=bpfo_1.0mm ref=1507.539 placa=1507.539 dif=0.000244 tol=0.014730 dec=falha OK ciclos=298
+seg seg=257 grav=bpfo_1.0mm ref=1453.325 placa=1453.325 dif=0.000000 tol=0.014560 dec=falha OK ciclos=295
+seg seg=258 grav=bpfo_1.0mm ref=1481.008 placa=1481.008 dif=0.000122 tol=0.014593 dec=falha OK ciclos=298
+seg seg=259 grav=bpfo_1.0mm ref=1481.055 placa=1481.055 dif=0.000000 tol=0.014670 dec=falha OK ciclos=295
+seg seg=260 grav=bpfo_1.0mm ref=1457.750 placa=1457.751 dif=0.000244 tol=0.014292 dec=falha OK ciclos=298
+seg seg=261 grav=bpfo_1.0mm ref=1475.701 placa=1475.701 dif=0.000244 tol=0.014188 dec=falha OK ciclos=295
+seg seg=262 grav=bpfo_1.0mm ref=1474.368 placa=1474.368 dif=0.000244 tol=0.014542 dec=falha OK ciclos=298
+seg seg=263 grav=bpfo_1.0mm ref=1481.956 placa=1481.956 dif=0.000122 tol=0.014990 dec=falha OK ciclos=295
+seg seg=264 grav=bpfo_1.0mm ref=1458.201 placa=1458.201 dif=0.000122 tol=0.014686 dec=falha OK ciclos=298
+seg seg=265 grav=bpfo_1.0mm ref=1499.839 placa=1499.839 dif=0.000366 tol=0.014947 dec=falha OK ciclos=295
+seg seg=266 grav=bpfo_1.0mm ref=1499.847 placa=1499.847 dif=0.000366 tol=0.014686 dec=falha OK ciclos=298
+seg seg=267 grav=bpfo_1.0mm ref=1474.071 placa=1474.071 dif=0.000122 tol=0.014315 dec=falha OK ciclos=295
+seg seg=268 grav=bpfo_1.0mm ref=1518.449 placa=1518.449 dif=0.000244 tol=0.014459 dec=falha OK ciclos=298
+seg seg=269 grav=bpfo_1.0mm ref=1417.373 placa=1417.373 dif=0.000244 tol=0.014482 dec=falha OK ciclos=295
+seg seg=270 grav=bpfo_1.0mm ref=1435.998 placa=1435.998 dif=0.000000 tol=0.014331 dec=falha OK ciclos=298
+seg seg=271 grav=bpfo_1.0mm ref=1429.632 placa=1429.632 dif=0.000000 tol=0.014478 dec=falha OK ciclos=295
+seg seg=272 grav=bpfo_1.0mm ref=1437.133 placa=1437.133 dif=0.000244 tol=0.014348 dec=falha OK ciclos=298
+seg seg=273 grav=bpfo_1.0mm ref=1426.241 placa=1426.241 dif=0.000000 tol=0.014713 dec=falha OK ciclos=295
+seg seg=274 grav=bpfo_1.0mm ref=1426.159 placa=1426.159 dif=0.000366 tol=0.015156 dec=falha OK ciclos=298
+seg seg=275 grav=bpfo_1.0mm ref=1446.440 placa=1446.440 dif=0.000000 tol=0.014613 dec=falha OK ciclos=295
+seg seg=276 grav=bpfo_1.0mm ref=1411.920 placa=1411.920 dif=0.000122 tol=0.014838 dec=falha OK ciclos=298
+seg seg=277 grav=bpfo_1.0mm ref=1403.665 placa=1403.665 dif=0.000244 tol=0.014978 dec=falha OK ciclos=295
+seg seg=278 grav=bpfo_1.0mm ref=1421.754 placa=1421.754 dif=0.000122 tol=0.014247 dec=falha OK ciclos=298
+seg seg=279 grav=bpfo_1.0mm ref=1447.550 placa=1447.550 dif=0.000000 tol=0.014358 dec=falha OK ciclos=295
+seg seg=280 grav=bpfo_1.0mm ref=1517.364 placa=1517.364 dif=0.000244 tol=0.014653 dec=falha OK ciclos=298
+seg seg=281 grav=bpfo_1.0mm ref=1496.233 placa=1496.233 dif=0.000122 tol=0.014698 dec=falha OK ciclos=295
+seg seg=282 grav=bpfo_1.0mm ref=1489.055 placa=1489.055 dif=0.000122 tol=0.014591 dec=falha OK ciclos=298
+seg seg=283 grav=bpfo_1.0mm ref=1516.010 placa=1516.010 dif=0.000244 tol=0.014363 dec=falha OK ciclos=295
+seg seg=284 grav=bpfo_1.0mm ref=1355.736 placa=1355.736 dif=0.000244 tol=0.014720 dec=falha OK ciclos=298
+seg seg=285 grav=bpfo_1.0mm ref=1412.956 placa=1412.956 dif=0.000000 tol=0.014404 dec=falha OK ciclos=295
+seg seg=286 grav=bpfo_1.0mm ref=1378.241 placa=1378.242 dif=0.000122 tol=0.014616 dec=falha OK ciclos=298
+seg seg=287 grav=bpfo_1.0mm ref=1492.495 placa=1492.495 dif=0.000000 tol=0.013999 dec=falha OK ciclos=295
+seg seg=288 grav=bpfo_1.0mm ref=1470.842 placa=1470.842 dif=0.000000 tol=0.014415 dec=falha OK ciclos=298
+seg seg=289 grav=bpfo_1.0mm ref=1473.136 placa=1473.136 dif=0.000122 tol=0.014593 dec=falha OK ciclos=295
+seg seg=290 grav=bpfo_1.0mm ref=1501.730 placa=1501.731 dif=0.000366 tol=0.014226 dec=falha OK ciclos=298
+seg seg=291 grav=bpfo_1.0mm ref=1421.733 placa=1421.733 dif=0.000488 tol=0.014973 dec=falha OK ciclos=295
+seg seg=292 grav=bpfo_1.0mm ref=1459.858 placa=1459.858 dif=0.000122 tol=0.014694 dec=falha OK ciclos=298
+seg seg=293 grav=bpfo_1.0mm ref=1470.341 placa=1470.341 dif=0.000122 tol=0.014734 dec=falha OK ciclos=295
+seg seg=294 grav=bpfo_1.0mm ref=1490.897 placa=1490.897 dif=0.000122 tol=0.014197 dec=falha OK ciclos=298
+resumo ok=295/295 decisoes_iguais=295/295 dif_max=0.000488 (seg 107) dif/tol_max=3.3% ciclos min=295 med=297 max=352 (med 2.97 us)
+MARCO OK
+cadeia inicio modelo=exp239 json=ee0c3e088366 segmentos=10 origem=C clock=100MHz
+cadeia seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=5862057 blocos=janela:976382,espectro:3950948,mel:362054,log:296254,dct:196668,resumo:49059,final:645,lda:242 soma=5832252 iguais=1
+cadeia seg=30 clipe=normal k=1 ref=-1392.133 placa=-1392.132 dif=0.000244 tol=0.013921 dec=normal OK ciclos=5861986 blocos=janela:976569,espectro:3950910,mel:362062,log:295999,dct:196550,resumo:49052,final:645,lda:242 soma=5832029 iguais=1
+cadeia seg=88 clipe=bpfi_0.3mm k=0 ref=1361.836 placa=1361.836 dif=0.000366 tol=0.013618 dec=falha OK ciclos=5862467 blocos=janela:976661,espectro:3950950,mel:361936,log:296511,dct:196612,resumo:49060,final:645,lda:242 soma=5832617 iguais=1
+cadeia seg=89 clipe=bpfi_0.3mm k=1 ref=1477.391 placa=1477.391 dif=0.000122 tol=0.014774 dec=falha OK ciclos=5863103 blocos=janela:976597,espectro:3950888,mel:362060,log:297131,dct:196610,resumo:49000,final:645,lda:242 soma=5833173 iguais=1
+cadeia seg=147 clipe=bpfi_1.0mm k=0 ref=1469.799 placa=1469.799 dif=0.000122 tol=0.014698 dec=falha OK ciclos=5864055 blocos=janela:976424,espectro:3950943,mel:362187,log:298235,dct:196550,resumo:49053,final:645,lda:242 soma=5834279 iguais=1
+cadeia seg=148 clipe=bpfi_1.0mm k=1 ref=1425.165 placa=1425.165 dif=0.000854 tol=0.014252 dec=falha OK ciclos=5863929 blocos=janela:976665,espectro:3950876,mel:361997,log:297929,dct:196552,resumo:49058,final:645,lda:242 soma=5833964 iguais=1
+cadeia seg=206 clipe=bpfo_0.3mm k=0 ref=1492.375 placa=1492.374 dif=0.000122 tol=0.014924 dec=falha OK ciclos=5861205 blocos=janela:976697,espectro:3950891,mel:361996,log:295181,dct:196671,resumo:49000,final:645,lda:242 soma=5831323 iguais=1
+cadeia seg=207 clipe=bpfo_0.3mm k=1 ref=1518.178 placa=1518.177 dif=0.000366 tol=0.015182 dec=falha OK ciclos=5861000 blocos=janela:976592,espectro:3950953,mel:361939,log:295058,dct:196670,resumo:49056,final:645,lda:242 soma=5831155 iguais=1
+cadeia seg=265 clipe=bpfo_1.0mm k=0 ref=1499.839 placa=1499.839 dif=0.000000 tol=0.014998 dec=falha OK ciclos=5862111 blocos=janela:976561,espectro:3950874,mel:361998,log:296205,dct:196673,resumo:49000,final:645,lda:242 soma=5832198 iguais=1
+cadeia seg=266 clipe=bpfo_1.0mm k=1 ref=1499.847 placa=1499.847 dif=0.000000 tol=0.014998 dec=falha OK ciclos=5861967 blocos=janela:976420,espectro:3950934,mel:362058,log:296161,dct:196671,resumo:49000,final:645,lda:242 soma=5832131 iguais=1
+cadeia resumo ok=10/10 decisoes_iguais=10/10 iguais_blocos=10/10 dif_max=0.000854 (seg 148) dif/tol_max=6.0% ciclos min=5861000 med=5862057 max=5864055 (med 58.62 ms, max 58.64 ms)
+cadeia blocos_mediana janela=976569 espectro=3950910 mel=361998 log=296205 dct=196612 resumo=49052 final=645 lda=242 soma=5832233 (58.32 ms)
+CADEIA OK
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+decim inicio recorte=seg29 clipe=normal fs=51200->12800 taps=147 fator=4 bloco=512 amostras=51348 descartar=37
+decim fase=0 OK
+decim saida n=12800/12837 saturadas=0 quadros=98 max_lsb=0.500092 (j=6240) tol=0.555330 pico=5533 dif_int16_max=1 n_dif=7 iguais=1 crc32=E4DD7E31 crc32_ref=D10BB565 OK
+decim ciclos total=17453346 (174.53 ms, 17.5% do tempo real) decimacao=11602669 (116.03 ms, 11.6%) fir=10210468 (102.10 ms) resto=1392201 (13.92 ms) cadeia=5850677 (58.51 ms)
+decim escore ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal igual_clipe=0 OK
+DECIMACAO OK duracao=350.41 ms
+demo seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=5862062
+$SEG,1,0,C,0,0,N,0,-1331.768,0,,,5862062*5A
+demo seg=30 clipe=normal k=1 ref=-1392.133 placa=-1392.132 dif=0.000244 tol=0.013921 dec=normal OK ciclos=5861925
+$SEG,1,1,C,0,1,N,0,-1392.132,0,,,5861925*53
+demo seg=88 clipe=bpfi_0.3mm k=0 ref=1361.836 placa=1361.836 dif=0.000366 tol=0.013618 dec=falha OK ciclos=5862438
+$SEG,1,2,C,1,0,F,1,1361.836,0,,,5862438*77
+demo seg=89 clipe=bpfi_0.3mm k=1 ref=1477.391 placa=1477.391 dif=0.000122 tol=0.014774 dec=falha OK ciclos=5863028
+$SEG,1,3,C,1,1,F,1,1477.391,0,,,5863028*75
+demo seg=147 clipe=bpfi_1.0mm k=0 ref=1469.799 placa=1469.799 dif=0.000122 tol=0.014698 dec=falha OK ciclos=5864095
+$SEG,1,4,C,2,0,F,1,1469.799,0,,,5864095*72
+demo seg=148 clipe=bpfi_1.0mm k=1 ref=1425.165 placa=1425.165 dif=0.000854 tol=0.014252 dec=falha OK ciclos=5863836
+$SEG,1,5,C,2,1,F,1,1425.165,0,,,5863836*79
+demo seg=206 clipe=bpfo_0.3mm k=0 ref=1492.375 placa=1492.374 dif=0.000122 tol=0.014924 dec=falha OK ciclos=5861150
+$SEG,1,6,C,3,0,F,1,1492.374,0,,,5861150*7F
+demo seg=207 clipe=bpfo_0.3mm k=1 ref=1518.178 placa=1518.177 dif=0.000366 tol=0.015182 dec=falha OK ciclos=5860974
+$SEG,1,7,C,3,1,F,1,1518.177,0,,,5860974*72
+demo seg=265 clipe=bpfo_1.0mm k=0 ref=1499.839 placa=1499.839 dif=0.000000 tol=0.014998 dec=falha OK ciclos=5862061
+$SEG,1,8,C,4,0,F,1,1499.839,0,,,5862061*7F

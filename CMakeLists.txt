@@ -60,6 +60,12 @@ target_compile_options(CMSISDSP PRIVATE -O3)
 # Only keep the tables needed by a 512-point real FFT (complex 256-point core)
 # and by arm_sin_f32; any other arm_rfft_fast_init_f32 length now returns
 # ARM_MATH_ARGUMENT_ERROR
+#
+# ARM_MATH_LOOPUNROLL (20/10, revisao do PR #9): sem ele, todas as funcoes usam o
+# laco simples, e o arm_fir_decimate_f32 levava ~9,1 ciclos por MAC (um acumulador
+# so, cada vfma esperando o anterior). Com ele, calcula 4 saidas por vez. Nas funcoes
+# que a cadeia usa (arm_mult_f32, arm_cmplx_mag_squared_f32, arm_dot_prod_f32) a
+# ordem das contas nao muda: as saidas sao bit a bit as mesmas, so os ciclos mudam.
 target_compile_definitions(CMSISDSP PUBLIC
     ARM_DSP_CONFIG_TABLES
     ARM_FFT_ALLOW_TABLES
@@ -68,6 +74,7 @@ target_compile_definitions(CMSISDSP PUBLIC
     ARM_TABLE_TWIDDLECOEF_RFFT_F32_512
     ARM_FAST_ALLOW_TABLES
     ARM_TABLE_SIN_F32
+    ARM_MATH_LOOPUNROLL
 )
 
 # Link directories setup

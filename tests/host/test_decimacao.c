@@ -4,13 +4,17 @@
  * Roda no PC, com a CMSIS-DSP generica do harness, a mesma verificacao que a placa
  * faz ao ligar (decimacao_verificar_com), e confere:
  *   - a fase do arm_fir_decimate_f32 e a 0 (impulso);
- *   - o recorte da 12.800 saidas (com o ultimo bloco de 148), sem saturar, dentro
- *     dos criterios contra o int16 do Python, e o escore do segmento decimado;
- *   - a requantizacao satura em vez de dar a volta;
- *   - os criterios reprovam quando devem (saida curta, 2 LSB, amostras demais
- *     diferentes, erro em float acima da tolerancia, NaN, passadas diferentes).
+ *   - o recorte da 12.800 saidas (com o ultimo bloco de 148), sem saturar, a no
+ *     maximo 1 LSB do int16 do Python, e o escore do segmento decimado;
+ *   - a cadeia quadro a quadro (98 quadros, buffer de 320) da o escore BIT A BIT
+ *     igual ao do mfcc_segmento() no segundo inteiro, com o mesmo int16;
+ *   - o CRC acumulado e o das 12.800 saidas;
+ *   - a requantizacao satura em vez de dar a volta e arredonda o meio para o par;
+ *   - os criterios reprovam quando devem (saida curta, saturada, quadros a menos,
+ *     2 LSB, erro em float acima da tolerancia, NaN, passadas diferentes) e nao
+ *     reprovam por amostras demais a 1 LSB (empates, revisao da Julia no PR #9).
  *
- * Com um argumento, grava as 12.800 saidas em float32 (little-endian) nesse
+ * Com um argumento, grava as 12.800 saidas em float32 (little-endian, em LSB) nesse
  * arquivo, para o comparar_decimacao.py comparar com a referencia em float64:
  *
  *   ./build/harness/test_decimacao build/decimacao_c.f32 > build/decimacao_pc.txt
@@ -29,6 +33,8 @@
 
 #include "clipes_demo.h"
 #include "decimacao.h"
+#include "lda_modelo.h"
+#include "mfcc_estagios.h"
 
 static int falhas = 0;
 
@@ -62,8 +68,9 @@ static uint32_t ns(void)
     return (uint32_t)((uint64_t)t.tv_sec * 1000000000u + (uint64_t)t.tv_nsec);
 }
 
-/* as saidas em float, na ordem, para o arquivo */
+/* as saidas em float (LSB) e requantizadas, na ordem */
 static float y_c[DECIM_N_SAIDAS];
+static int16_t q_c[DECIM_N_SAIDAS];
 static uint32_t n_y = 0u;
 
 static void guardar(void *ctx, uint32_t j, float y)
@@ -71,72 +78,102 @@ static void guardar(void *ctx, uint32_t j, float y)
     (void)ctx;
     if (j < DECIM_N_SAIDAS) {
         y_c[j] = y;
+        q_c[j] = decimacao_quantizar(y, NULL);
         n_y = j + 1u;
     }
 }
 
-/* uma comparacao que passa, para estragar um campo de cada vez */
+/* uma medida e uma comparacao que passam, para estragar um campo de cada vez */
 static void base(decimacao_medida_t *m, decimacao_comparacao_t *c)
 {
     memset(m, 0, sizeof *m);
     memset(c, 0, sizeof *c);
     m->n_saidas = DECIM_N_SAIDAS;
     m->n_total = DECIM_N_SAIDAS_TOTAL;
+    m->n_quadros = MFCC_N_QUADROS;
+    m->crc32 = c->crc32 = 0x12345678u;
     c->max_lsb = 0.5f;
     c->pico = 5533.0f;
     c->dif_int16_max = 1;
     c->n_dif = 2u;
-    c->iguais = 1u;
 }
 
 int main(int argc, char **argv)
 {
-    /* 1. requantizacao: escala de 32767, arredonda e satura */
+    /* 1. requantizacao (ja em LSB): arredonda o meio para o par e satura */
     {
         uint32_t sat = 0u;
-        CONFERIR(decimacao_quantizar(1.0f, &sat) == 32767 && sat == 0u, "1,0 deveria dar 32767");
-        CONFERIR(decimacao_quantizar(-1.0f, &sat) == -32767 && sat == 0u, "-1,0 deveria dar -32767");
+        CONFERIR(decimacao_quantizar(32767.0f, &sat) == 32767 && sat == 0u, "32767 deveria dar 32767");
+        CONFERIR(decimacao_quantizar(-32768.0f, &sat) == -32768 && sat == 0u, "-32768 deveria dar -32768");
         CONFERIR(decimacao_quantizar(0.0f, &sat) == 0, "0 deveria dar 0");
-        CONFERIR(decimacao_quantizar(1.5f, &sat) == 32767 && sat == 1u, "1,5 deveria saturar em 32767");
-        CONFERIR(decimacao_quantizar(-1.5f, &sat) == -32768 && sat == 2u, "-1,5 deveria saturar em -32768");
-        /* 2,5 e 3,5 LSB exatos (32767 * k / 32767 em float nao e exato; usar a
-         * conta inversa com valores representaveis): meio-para-par */
-        CONFERIR(lrintf(2.5f) == 2 && lrintf(3.5f) == 4 && lrintf(-2.5f) == -2,
-                 "lrintf nao arredonda o meio para o par neste modo de arredondamento");
+        CONFERIR(decimacao_quantizar(2.5f, &sat) == 2 && decimacao_quantizar(3.5f, &sat) == 4
+                     && decimacao_quantizar(-2.5f, &sat) == -2,
+                 "o meio deveria ir para o par (2,5 -> 2; 3,5 -> 4; -2,5 -> -2)");
+        CONFERIR(decimacao_quantizar(40000.0f, &sat) == 32767 && sat == 1u, "40000 deveria saturar em 32767");
+        CONFERIR(decimacao_quantizar(-40000.0f, &sat) == -32768 && sat == 2u,
+                 "-40000 deveria saturar em -32768");
+        CONFERIR(decimacao_quantizar(32767.6f, &sat) == 32767 && sat == 3u,
+                 "32767,6 arredonda para 32768 e deveria saturar");
     }
 
     /* 2. a fase do decimador */
     CONFERIR(decimacao_fase() == 0, "decimacao_fase() = %d, esperado 0", decimacao_fase());
 
-    /* 3. a verificacao da placa, no PC */
+    /* 3. sem o init do MFCC, o executar recusa */
+    {
+        decimacao_medida_t m;
+        CONFERIR(decimacao_executar(NULL, NULL, NULL, 0u, &m) == -3,
+                 "decimacao_executar sem mfcc_estagios_init deveria devolver -3");
+    }
+
+    /* 4. a verificacao da placa, no PC */
     const int ok = decimacao_verificar_com(enviar, ns, 1000000000u);
     CONFERIR(ok == 1, "decimacao_verificar_com devolveu %d", ok);
-    CONFERIR(strstr(saida, "DECIMACAO OK\r\n") != NULL, "sem DECIMACAO OK na saida");
+    CONFERIR(strstr(saida, "DECIMACAO OK duracao=") != NULL, "sem DECIMACAO OK na saida");
     CONFERIR(strstr(saida, "FALHOU") == NULL, "alguma linha FALHOU");
     CONFERIR(strstr(saida, "n=12800/12837") != NULL, "a saida nao tem 12.800 de 12.837 saidas");
+    CONFERIR(strstr(saida, "quadros=98") != NULL, "a cadeia nao recebeu 98 quadros");
 
-    /* 4. a passada medida e a conferencia, separadas, e as saidas em float */
+    /* 5. a passada medida, com as saidas guardadas */
     decimacao_medida_t m;
-    decimacao_executar(NULL, guardar, NULL, NULL, 0u, &m);
+    CONFERIR(decimacao_executar(guardar, NULL, NULL, 0u, &m) == 0, "decimacao_executar falhou");
     CONFERIR(m.n_saidas == DECIM_N_SAIDAS && n_y == DECIM_N_SAIDAS, "n_saidas=%lu",
              (unsigned long)m.n_saidas);
     CONFERIR(m.n_total == DECIM_N_SAIDAS_TOTAL, "n_total=%lu", (unsigned long)m.n_total);
     CONFERIR(m.n_saturadas == 0u, "saturadas=%lu", (unsigned long)m.n_saturadas);
+    CONFERIR(m.n_quadros == MFCC_N_QUADROS, "n_quadros=%lu", (unsigned long)m.n_quadros);
+    CONFERIR(m.crc32 == decimacao_crc32(q_c, DECIM_N_SAIDAS), "o CRC acumulado nao e o das saidas");
 
+    /* 6. quadro a quadro = segundo inteiro, bit a bit (as mesmas chamadas, na mesma ordem) */
+    {
+        float x[2 * MFCC_N_COEFS];
+        CONFERIR(mfcc_segmento(q_c, x) == 0, "mfcc_segmento falhou");
+        const float escore_inteiro = lda_escore(x);
+        CONFERIR(memcmp(&escore_inteiro, &m.escore, sizeof m.escore) == 0,
+                 "quadro a quadro deu %.9g e o segundo inteiro %.9g", (double)m.escore,
+                 (double)escore_inteiro);
+    }
+
+    /* 7. a conferencia */
     decimacao_comparacao_t c;
-    decimacao_conferir(clipes[RECORTE_CLIPE].pcm, decimacao_saida(), NULL, NULL, &c);
+    decimacao_conferir(clipes[RECORTE_CLIPE].pcm, NULL, NULL, &c);
+    CONFERIR(decimacao_avaliar(&m, &c), "a conferencia deveria passar");
     CONFERIR(c.iguais, "a conferencia deu outro int16 que a passada medida");
     CONFERIR(c.dif_int16_max <= 1, "dif_int16_max=%ld", (long)c.dif_int16_max);
-    fprintf(stderr, "PC: max_lsb=%.6f (j=%lu) tol=%.6f pico=%.0f dif_int16_max=%ld n_dif=%lu\n",
+    fprintf(stderr, "PC: max_lsb=%.6f (j=%lu) tol=%.6f pico=%.0f dif_int16_max=%ld n_dif=%lu escore=%.4f\n",
             (double)c.max_lsb, (unsigned long)c.j_max_lsb, (double)DECIM_TOL_LSB_PLACA(c.pico),
-            (double)c.pico, (long)c.dif_int16_max, (unsigned long)c.n_dif);
+            (double)c.pico, (long)c.dif_int16_max, (unsigned long)c.n_dif, (double)m.escore);
 
-    /* 5. os criterios reprovam quando devem */
+    /* 8. os criterios reprovam quando devem */
     {
         decimacao_medida_t mm;
         decimacao_comparacao_t cc;
         base(&mm, &cc);
         CONFERIR(decimacao_avaliar(&mm, &cc), "a comparacao base deveria passar");
+
+        base(&mm, &cc);
+        cc.n_dif = 1000u;   /* empates a 1 LSB nao reprovam (gravacoes fortes) */
+        CONFERIR(decimacao_avaliar(&mm, &cc), "amostras a 1 LSB nao deveriam reprovar");
 
         base(&mm, &cc);
         mm.n_saidas = DECIM_N_SAIDAS - 37u;   /* esqueceu o ultimo bloco de 148 */
@@ -148,12 +185,12 @@ int main(int argc, char **argv)
         CONFERIR(!decimacao_avaliar(&mm, &cc), "amostra saturada deveria reprovar");
 
         base(&mm, &cc);
-        cc.dif_int16_max = 2;
-        CONFERIR(!decimacao_avaliar(&mm, &cc), "2 LSB deveria reprovar");
+        mm.n_quadros = MFCC_N_QUADROS - 1u;
+        CONFERIR(!decimacao_avaliar(&mm, &cc), "quadros a menos deveria reprovar");
 
         base(&mm, &cc);
-        cc.n_dif = DECIM_MAX_N_DIF + 1u;
-        CONFERIR(!decimacao_avaliar(&mm, &cc), "amostras diferentes demais deveria reprovar");
+        cc.dif_int16_max = 2;
+        CONFERIR(!decimacao_avaliar(&mm, &cc), "2 LSB deveria reprovar");
 
         base(&mm, &cc);
         cc.max_lsb = DECIM_TOL_LSB_PLACA(cc.pico) * 1.01f;
@@ -164,21 +201,19 @@ int main(int argc, char **argv)
         CONFERIR(!decimacao_avaliar(&mm, &cc), "NaN deveria reprovar");
 
         base(&mm, &cc);
-        cc.iguais = 0u;
-        CONFERIR(!decimacao_avaliar(&mm, &cc), "passadas diferentes deveriam reprovar");
+        cc.crc32 ^= 1u;
+        CONFERIR(!decimacao_avaliar(&mm, &cc) && !cc.iguais, "passadas diferentes deveriam reprovar");
     }
 
-    /* 6. uma referencia errada de 1 LSB em muitas amostras e pega pela conferencia */
+    /* 9. uma referencia errada de 2 LSB numa amostra e pega pela conferencia */
     {
         static int16_t ref_errada[DECIM_N_SAIDAS];
         memcpy(ref_errada, clipes[RECORTE_CLIPE].pcm, sizeof ref_errada);
-        for (uint32_t j = 0; j < DECIM_N_SAIDAS; j += 100u) {
-            ref_errada[j] = (int16_t)(ref_errada[j] + 1);
-        }
+        ref_errada[6400] = (int16_t)(ref_errada[6400] + 2);
         decimacao_comparacao_t ce;
-        decimacao_conferir(ref_errada, decimacao_saida(), NULL, NULL, &ce);
-        CONFERIR(!decimacao_avaliar(&m, &ce), "128 amostras erradas deveriam reprovar (n_dif=%lu)",
-                 (unsigned long)ce.n_dif);
+        decimacao_conferir(ref_errada, NULL, NULL, &ce);
+        CONFERIR(!decimacao_avaliar(&m, &ce), "uma amostra a 2 LSB deveria reprovar (max %ld)",
+                 (long)ce.dif_int16_max);
     }
 
     if (argc > 1) {
@@ -187,7 +222,7 @@ int main(int argc, char **argv)
         if (f) {
             CONFERIR(fwrite(y_c, sizeof y_c[0], DECIM_N_SAIDAS, f) == DECIM_N_SAIDAS, "fwrite");
             fclose(f);
-            fprintf(stderr, "saidas em float32 gravadas em %s\n", argv[1]);
+            fprintf(stderr, "saidas em float32 (LSB) gravadas em %s\n", argv[1]);
         }
     }
 
@@ -195,6 +230,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "TEST DECIMACAO FALHOU (%d)\n", falhas);
         return 1;
     }
-    fprintf(stderr, "TEST DECIMACAO OK (fase 0, 12.800 saidas, escore, reprova quando deve)\n");
+    fprintf(stderr, "TEST DECIMACAO OK (fase 0, 12.800 saidas, quadro a quadro = segundo inteiro, "
+                    "reprova quando deve)\n");
     return 0;
 }

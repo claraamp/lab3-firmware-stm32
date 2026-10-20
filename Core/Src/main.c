@@ -191,9 +191,10 @@ int main(void)
   const int cadeia_ok = cadeia_verificar();
 
   /* Decimacao embarcada (bloco 0, 20/10): o recorte de 1 s a 51,2 kHz pelo
-   * arm_fir_decimate_f32 (147 coeficientes, fator 4), comparado com o int16 do
-   * Python, e o segmento decimado pela cadeia, contra o escore de referencia do
-   * recorte. Ciclos pelo DWT. Cerca de 0,1 s. Ver decimacao.h. */
+   * arm_fir_decimate_f32 (147 coeficientes, fator 4) e pela cadeia, quadro a
+   * quadro, comparado com o int16 do Python e com o escore de referencia do
+   * recorte. Ciclos pelo DWT. Duas decimacoes e a cadeia: a duracao sai na linha
+   * DECIMACAO OK. Ver decimacao.h. */
   const int decimacao_ok = decimacao_verificar();
   /* USER CODE END 2 */
 

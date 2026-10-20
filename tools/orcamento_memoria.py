@@ -56,7 +56,7 @@ def parte(arquivo: str, secao: str) -> str:
     if "cadeia_clipes.c" in a:
         return "cadeia completa na placa (cadeia_clipes.c)"
     if "decimacao.c" in a:
-        # o codigo, o segmento decimado (25.600 B) e os buffers do decimador; a
+        # o codigo, os buffers do decimador e o do quadro do MFCC; a
         # arm_fir_decimate_f32 e o init dela vem da libCMSISDSP.a e caem na linha
         # da CMSIS-DSP
         return "decimacao (decimacao.c; a FIR esta na CMSIS-DSP)"

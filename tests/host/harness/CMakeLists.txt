@@ -47,6 +47,8 @@ target_compile_definitions(cmsisdsp_host PUBLIC
     ARM_TABLE_TWIDDLECOEF_F32_256
     ARM_TABLE_BITREVIDX_FLT_256
     ARM_TABLE_TWIDDLECOEF_RFFT_F32_512
+    # como no firmware (CMakeLists.txt da raiz): o mesmo caminho da CMSIS
+    ARM_MATH_LOOPUNROLL
 )
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
     # no PC, o arm_math_types.h nao pode incluir o cmsis_compiler.h (intrinsecos do
@@ -129,8 +131,21 @@ add_executable(test_decimacao
     ${RAIZ}/Core/Src/texto_fixo.c
 )
 target_compile_definitions(test_decimacao PRIVATE DECIMACAO_HOST CADEIA_HOST)
+
+# Uma gravacao inteira a 51,2 kHz pelo decimador do firmware, para o
+# tests/host/decimacao/tolerancias_gravacoes.py medir os 295 segmentos.
+add_executable(decimar_gravacao
+    ${RAIZ}/tests/host/decimacao/decimar_gravacao.c
+    ${RAIZ}/Core/Src/decimacao.c
+    ${RAIZ}/Core/Src/cadeia_clipes.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
+    ${RAIZ}/Core/Src/pacote_serial.c
+    ${RAIZ}/Core/Src/texto_fixo.c
+)
+target_compile_definitions(decimar_gravacao PRIVATE DECIMACAO_HOST CADEIA_HOST)
 foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa
-        test_cadeia_clipes test_decimacao)
+        test_cadeia_clipes test_decimacao decimar_gravacao)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
