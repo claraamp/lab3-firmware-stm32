@@ -198,7 +198,9 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     /* Demonstracao: a cadeia roda de novo em cada segmento dos clipes (origem C no
-     * $SEG). O marco_lda_passo() (origem R) continua no marco_lda.c, fora do laco. */
+     * $SEG). Trava de proposito nas DUAS conferencias: se o marco falhar (LDA ou
+     * cabecalhos do modelo incoerentes), os LEDs mostram o padrao de erro mesmo com
+     * a CADEIA OK, porque a demonstracao usa o mesmo lda_escore(). */
     cadeia_passo(marco_ok && cadeia_ok);
   }
   /* USER CODE END 3 */

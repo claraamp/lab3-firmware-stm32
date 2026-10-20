@@ -2,9 +2,10 @@
  * marco_lda.h -- marco de 13/10: LDA na placa com caracteristicas de referencia
  *
  * A placa recebe as caracteristicas que o Python calculou (lda_vetores_teste.h),
- * calcula o escore com o lda_modelo.h, compara com o escores_referencia.csv,
- * acende o LED da decisao e manda o resultado pela USART1. O MFCC ainda nao esta
- * portado: o marco confere o porte do classificador, nao o desempenho.
+ * calcula o escore com o lda_modelo.h, compara com o escores_referencia.csv e
+ * manda o resultado pela USART1. Confere o porte do classificador, nao o
+ * desempenho. Desde 20/10 e so a conferencia do boot: a demonstracao nos LEDs e
+ * da cadeia completa (cadeia_clipes.h).
  *
  * As funcoes "puras" (sem HAL) compilam tambem no PC com -DMARCO_HOST, para
  * testar a logica de comparacao e a formatacao sem a placa.
@@ -28,7 +29,8 @@ typedef struct {
 
 /* ---- sem HAL ------------------------------------------------------------ */
 
-/* Numero de segmentos e de segmentos da demonstracao com os LEDs. */
+/* Numero de segmentos e de segmentos "de demonstracao" (o de menor |escore| de
+ * cada gravacao; usados pelo teste no PC). */
 uint16_t marco_n_segmentos(void);
 uint16_t marco_n_demo(void);
 uint16_t marco_demo_indice(uint16_t k);
@@ -66,10 +68,9 @@ void marco_pacote(uint16_t i, const marco_resultado_t *r, uint32_t n, uint32_t c
  * Devolve 1 se todos os escores e decisoes bateram com a referencia. */
 int marco_lda_verificar(void);
 
-/* Um passo do laco principal: se a verificacao passou, mostra o proximo
- * segmento da demonstracao nos LEDs (2 s) e manda a linha demo e o pacote $SEG;
- * senao, pisca os dois LEDs juntos. */
-void marco_lda_passo(int verificacao_ok);
+/* A demonstracao nos LEDs com as caracteristicas prontas (marco_lda_passo(),
+ * origem R) saiu em 20/10: o laco principal usa o cadeia_passo() (cadeia_clipes.h),
+ * que roda a cadeia completa nos clipes. O marco ficou so como conferencia no boot. */
 #endif
 
 #endif /* MARCO_LDA_H */

@@ -159,11 +159,6 @@ static uint32_t avaliar_medindo(uint16_t i, marco_resultado_t *r, uint32_t custo
     return c > custo_leitura ? c - custo_leitura : 0u;
 }
 
-/* Custo de ler o DWT, medido no marco_lda_verificar(), e contador dos pacotes
- * $SEG desde o boot (o painel usa para ver pacotes perdidos). */
-static uint32_t custo_leitura_dwt = 0u;
-static uint32_t n_pacotes = 0u;
-
 static uint32_t us_x100(uint32_t ciclos)
 {
     const uint32_t mhz = SystemCoreClock / 1000000u;
@@ -203,7 +198,6 @@ int marco_lda_verificar(void)
     const uint32_t a = DWT->CYCCNT;
     const uint32_t b = DWT->CYCCNT;
     const uint32_t custo_leitura = b - a;
-    custo_leitura_dwt = custo_leitura;
 
     uint32_t n_ok = 0, n_dec_ok = 0;
     uint32_t c_min = UINT32_MAX, c_max = 0, c_soma = 0;
@@ -245,44 +239,6 @@ int marco_lda_verificar(void)
     const int ok = (n_ok == VT_N_SEGMENTOS);
     tx_str(ok ? "MARCO OK\r\n" : "MARCO FALHOU\r\n");
     return ok;
-}
-
-void marco_lda_passo(int verificacao_ok)
-{
-    static uint16_t k = 0;
-    char linha[200];
-
-    if (!verificacao_ok) {
-        /* padrao de erro: os dois LEDs juntos, rapido (nao e uma decisao) */
-        for (int j = 0; j < 16; ++j) {
-            leds(j & 1, j & 1);
-            HAL_Delay(125);
-        }
-        tx_str("ERRO: verificacao do marco falhou (ver as linhas FALHOU acima)\r\n");
-        return;
-    }
-
-    const uint16_t i = vt_demo[k];
-    marco_resultado_t r;
-    const uint32_t ciclos = avaliar_medindo(i, &r, custo_leitura_dwt);
-    pacote_segmento_t p;
-    marco_pacote(i, &r, n_pacotes++, ciclos, &p);
-    tx(linha, marco_linha(linha, sizeof linha, "demo", i, &r, ciclos), sizeof linha);
-    tx(linha, pacote_linha(linha, sizeof linha, &p), sizeof linha);
-    if (p.disparou & PACOTE_ERRO) {
-        /* escore nao finito: o padrao de erro (os dois LEDs juntos, rapido),
-         * nunca o verde de "normal". Dura os mesmos 2 s de uma decisao. */
-        for (int j = 0; j < 16; ++j) {
-            leds(j & 1, j & 1);
-            HAL_Delay(125);
-        }
-    } else {
-        leds(!p.falha, p.falha);
-        HAL_Delay(2000);
-    }
-    leds(0, 0);
-    HAL_Delay(300);
-    k = (uint16_t)((k + 1u) % VT_N_DEMO);
 }
 
 #endif /* MARCO_HOST */
