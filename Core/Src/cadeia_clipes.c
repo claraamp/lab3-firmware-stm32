@@ -427,7 +427,7 @@ void cadeia_passo(int ok)
     if (!ok) {
         piscar_erro();
         static const char aviso[] =
-            "ERRO: verificacao do marco ou da cadeia falhou (ver as linhas FALHOU acima)\r\n";
+            "ERRO: verificacao do marco, da cadeia ou da decimacao falhou (ver as linhas FALHOU acima)\r\n";
         enviar_uart(aviso, sizeof aviso - 1u);
         return;
     }

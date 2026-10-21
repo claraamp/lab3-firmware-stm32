@@ -60,6 +60,12 @@ target_compile_options(CMSISDSP PRIVATE -O3)
 # Only keep the tables needed by a 512-point real FFT (complex 256-point core)
 # and by arm_sin_f32; any other arm_rfft_fast_init_f32 length now returns
 # ARM_MATH_ARGUMENT_ERROR
+#
+# ARM_MATH_LOOPUNROLL (20/10, revisao do PR #9): sem ele, todas as funcoes usam o
+# laco simples, e o arm_fir_decimate_f32 levava ~9,1 ciclos por MAC (um acumulador
+# so, cada vfma esperando o anterior). Com ele, calcula 4 saidas por vez. Nas funcoes
+# que a cadeia usa (arm_mult_f32, arm_cmplx_mag_squared_f32, arm_dot_prod_f32) a
+# ordem das contas nao muda: as saidas sao bit a bit as mesmas, so os ciclos mudam.
 target_compile_definitions(CMSISDSP PUBLIC
     ARM_DSP_CONFIG_TABLES
     ARM_FFT_ALLOW_TABLES
@@ -68,6 +74,7 @@ target_compile_definitions(CMSISDSP PUBLIC
     ARM_TABLE_TWIDDLECOEF_RFFT_F32_512
     ARM_FAST_ALLOW_TABLES
     ARM_TABLE_SIN_F32
+    ARM_MATH_LOOPUNROLL
 )
 
 # Link directories setup
@@ -89,11 +96,15 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # cadeia completa na placa (20/10): os clipes passam pelo mfcc_segmento() e pelo
     # lda_escore() no boot (conferencia com o CSV e ciclos por bloco) e no laco dos LEDs
     Core/Src/cadeia_clipes.c
+    # decimacao embarcada (bloco 0, 20/10): o recorte de 51,2 kHz pelo
+    # arm_fir_decimate_f32 e pela cadeia no boot, com os ciclos pelo DWT
+    Core/Src/decimacao.c
 )
-# Marco de 13/10 (LDA na placa), estagios do MFCC e a cadeia completa: sempre
-# otimizados, inclusive no Debug, para o tempo medido pelo DWT ser o do firmware
-# final, como o CMSIS-DSP
+# Marco de 13/10 (LDA na placa), estagios do MFCC, a cadeia completa e a decimacao:
+# sempre otimizados, inclusive no Debug, para o tempo medido pelo DWT ser o do
+# firmware final, como o CMSIS-DSP
 set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c Core/Src/cadeia_clipes.c
+    Core/Src/decimacao.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Teste dos blocos 1 a 3 na placa (janela, espectro e Mel; Core/Src/blocos13.c):
@@ -129,12 +140,13 @@ if(VALIDACAO_PLACA)
 endif()
 
 # Build de medida do orcamento de flash e RAM (Core/Src/orcamento.c): poe no link
-# tudo o que o firmware final vai ter e que hoje o --gc-sections descarta (cadeia
-# completa, LDA, os 5 clipes, o recorte de 51,2 kHz e os buffers da decimacao),
-# SEM EXECUTAR nada disso, para medir pelo .map com o tools/orcamento_memoria.py.
+# tudo o que o firmware final vai ter e que o --gc-sections descartaria por ninguem
+# usar, SEM EXECUTAR nada disso, para medir pelo .map com o tools/orcamento_memoria.py.
+# Desde 20/10 o build padrao ja usa tudo (cadeia, LDA, clipes, recorte e decimacao),
+# entao os dois builds medem quase o mesmo; o orcamento.c fica como garantia.
 # DESLIGADO por padrao. Para medir: cmake --preset Debug -DORCAMENTO=ON (o valor
 # fica no cache do build, como o BLOCOS13; volte com -DORCAMENTO=OFF).
-option(ORCAMENTO "Build de medida: cadeia, clipes e decimacao no link, sem executar" OFF)
+option(ORCAMENTO "Build de medida: cadeia, clipes e recorte no link, sem executar" OFF)
 if(ORCAMENTO)
     target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/orcamento.c)
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_ORCAMENTO)
