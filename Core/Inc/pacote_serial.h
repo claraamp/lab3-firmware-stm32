@@ -27,7 +27,10 @@
  *
  * A origem D (22/10) e um valor novo de um campo que ja existia: os campos e a
  * ordem nao mudaram, entao a versao continua 1 (o ler_pacotes.py foi atualizado
- * junto).
+ * junto). Um leitor da v1 anterior recusa o D como origem desconhecida; o painel
+ * deve aceitar R, C, D e A. O D e o primeiro C de cada volta tem o mesmo clipe e
+ * segmento (0, 0), o mesmo segundo de audio por dois caminhos: a chave de um
+ * segmento e origem + clipe + segmento, e repeticao se ve pelo n.
  *
  * Nao usa a HAL: compila no PC (tests/host/test_pacote_serial.c) e na placa.
  */

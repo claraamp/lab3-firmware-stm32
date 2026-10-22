@@ -397,7 +397,9 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 
 **Os campos de novidade estão reservados, não prometidos.** Enquanto nenhum detector for adotado, o código é 0, e a pontuação e o limiar vão vazios. Adotar um detector não muda o formato; mudar o formato exige subir a versão (`PACOTE_VERSAO`).
 
-**A origem `D` (22/10) não muda a versão:** é um valor novo de um campo que já existia, com os mesmos campos na mesma ordem. O `ler_pacotes.py` foi atualizado junto e, no resumo, conta os segmentos e as decisões por origem.
+**A origem `D` (22/10) não muda a versão:** é um valor novo de um campo que já existia, com os mesmos campos na mesma ordem. O `ler_pacotes.py` foi atualizado junto e, no resumo, conta os segmentos e as decisões por origem. Um leitor da versão 1 anterior a esta mudança recusa o pacote `D` como "origem desconhecida": hoje isso não quebra nada, porque o único leitor é o `ler_pacotes.py`, mas a regra para o painel é aceitar as quatro origens (`R`, `C`, `D`, `A`) e, se aparecer uma origem que ele não conhece, descartar só aquele pacote, sem tratar como pacote corrompido (revisão da Júlia no PR da primeira inferência).
+
+**O pacote `D` e o primeiro `C` de cada volta têm o mesmo clipe e segmento (0, 0):** são o mesmo segundo de áudio por dois caminhos, o `D` a partir do recorte de 51,2 kHz e o `C` a partir do clipe já decimado pelo Python. Isso serve para o painel comparar as duas decisões, mas a chave de um segmento no painel é **origem, clipe e segmento**, nunca só clipe e segmento; senão o par parece um pacote repetido. Pacote repetido de verdade se vê pelo contador `n`.
 
 **Limites.** Com 3 casas, cada número vai até cerca de ±4 × 10⁶; acima disso, sai `inf` (`texto_fixo.h`). Esse limite é o de caber em `uint32_t`, não o de precisão: o `float` tem ~7 dígitos significativos, então acima de ~10.000 a terceira casa já não é confiável. O escore da LDA fica em ±1.600. O id do modelo não pode ter vírgula nem `*`. A maior linha possível cabe em `PACOTE_TAM_MAX` (128 B).
 
