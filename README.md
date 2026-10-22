@@ -518,6 +518,21 @@ Estes ciclos são da CMSIS-DSP **sem** `ARM_MATH_LOOPUNROLL`. Com ele (desde a r
 
 A FFT quase não muda porque o `arm_cfft_f32` não tem a opção; o ganho vem do Mel, da DCT e da janela. O segmento inteiro fica em 5,9 % do tempo real.
 
+**No firmware final (22/10).** Com a primeira inferência de ponta a ponta no laço, a captura de [`docs/primeira-inferencia-22-10.log`](docs/primeira-inferencia-22-10.log) remede a cadeia no build que vai para o relatório. Os escores e as decisões são os mesmos (`CADEIA OK` 10/10, pior caso 6,0 %, `iguais_blocos=10/10`), e o segmento inteiro fica 0,1 % abaixo do de 20/10 (o bloco que mais muda é o resumo, −1,3 %, 640 ciclos), dentro da variação entre builds:
+
+| Bloco | Com `ARM_MATH_LOOPUNROLL` (20/10) | Firmware final (22/10) | ms a 100 MHz (22/10) |
+|---|---:|---:|---:|
+| janela | 976.569 | 976.689 | 9,77 |
+| espectro | 3.950.910 | 3.944.931 | 39,45 |
+| Mel | 361.998 | 362.546 | 3,63 |
+| log | 296.205 | 296.749 | 2,97 |
+| DCT | 196.612 | 196.611 | 1,97 |
+| resumo (Welford) | 49.052 | 48.412 | 0,48 |
+| média e desvio | 645 | 650 | 0,007 |
+| LDA | 242 | 241 | 0,002 |
+| soma dos blocos | 5.832.233 | 5.826.829 | 58,27 |
+| **segmento inteiro (`ciclos`, uma chamada)** | **5.862.057** (58,62 ms) | **5.855.300** (58,55 ms) | 5,9 % do tempo real |
+
 - **Escore:** 10/10 dentro da tolerância e com as decisões do CSV; pior caso 6,0 % da tolerância (`bpfi_1.0mm_seg0148`, diferença de 0,0009). A passada de medida deu bit a bit as mesmas 26 características nos 10 segmentos (`iguais_blocos=10/10`).
 - **Tempo:** 61,45 ms por segundo de áudio, ou **6,1 % do tempo real**, com variação de 0,05 % entre segmentos. É o mesmo número da validação do segmento completo (6,145 M ciclos, 19/10).
 - **A FFT domina:** espectro e janela somam 82 % do segmento. Os blocos 1 a 3 batem com o `blocos13` (10.723, 40.632 e 4.830 ciclos por quadro, × 98).
@@ -709,7 +724,35 @@ Aperte o RESET logo depois de abrir, para pegar o boot inteiro (`MARCO OK`, `CAD
 
 ### Resultado na placa
 
-*A preencher com a captura de 22/10.*
+Captura de 22/10 (build Debug padrão, sem `BLOCOS13`, `VALIDACAO_PLACA` nem `ORCAMENTO`), versionada em [`docs/primeira-inferencia-22-10.log`](docs/primeira-inferencia-22-10.log): um boot, do `hello frente1` a três voltas do laço (60 s). No mesmo boot, `MARCO OK` (295/295), `CADEIA OK` (10/10) e `DECIMACAO OK`. O resumo dos pacotes sai de novo com:
+
+```bash
+python3 tests/host/pacote/ler_pacotes.py --arquivo docs/primeira-inferencia-22-10.log --resumo
+```
+
+```
+resumo: 25 pacotes certos, 0 descartados, 0 perdidos, 0 reinicios; 23 segmentos; modelo exp239
+por origem: C (clipe) 20: 4 N, 16 F; D (decimado) 3: 3 N, 0 F
+```
+
+As três inferências de ponta a ponta:
+
+```
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446485 (174.46 ms, 17.4% do tempo real) decimacao=11602884 cadeia=5843601 crc32=E4DD7E31 igual_boot=1
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446414 (174.46 ms, 17.4% do tempo real) decimacao=11602704 cadeia=5843710 crc32=E4DD7E31 igual_boot=1
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446451 (174.46 ms, 17.4% do tempo real) decimacao=11602724 cadeia=5843727 crc32=E4DD7E31 igual_boot=1
+```
+
+| Etapa (1 s de áudio, inferência no laço) | Ciclos (1ª volta) | ms a 100 MHz | % do tempo real |
+|---|---:|---:|---:|
+| decimação (FIR, conversão e requantização) | 11.602.884 | 116,03 | 11,6 % |
+| cadeia (MFCC e LDA, quadro a quadro) | 5.843.601 | 58,44 | 5,8 % |
+| **do `int16` a 51,2 kHz ao escore** | **17.446.485** | **174,46** | **17,4 %** |
+
+- **Fidelidade:** as três inferências deram o mesmo `int16` (CRC `E4DD7E31`) e o mesmo escore da passada do boot, bit a bit (`igual_boot=1`). O escore fica a 8,3 % da tolerância encadeada do A4 (0,001099 de 0,013318), com a decisão da referência (normal), como no boot de 20/10.
+- **Pacotes:** os 23 `$SEG` (3 `D` e 20 `C`) saíram numa sequência só, `n` de 0 a 22, sem perda nem pacote descartado; os 3 `D` são normais e os `C` têm as decisões do CSV (4 normais, 16 falhas).
+- **Tempo:** 174,46 ms do `int16` a 51,2 kHz ao escore, com variação de 71 ciclos entre as voltas (< 0,001 %). É o mesmo número da passada medida no boot (`decim ciclos total=17446493`). A cadeia dentro da decimação (5.843.601) fica 0,2 % abaixo da cadeia dos clipes no mesmo boot (5.855.300): a medida aqui não inclui o laço dos quadros.
+- **Meta física da Fase 2:** cadeia portada, com a inferência executando no microcontrolador do áudio na taxa original até a decisão nos LEDs e na serial.
 
 ## Validação bloco a bloco
 
@@ -730,6 +773,8 @@ A validação independente da cadeia em C (card "Validar cada bloco da cadeia em
 | Segmento de 1 s na placa, do `int16` ao escore (`cadeia resumo`, mediana dos 10) | 6.145.466 ciclos = 61,45 ms (6,1 % do tempo real); blocos na seção "Cadeia completa na placa" |
 | Decimação de 1 s de áudio na placa (51,2 → 12,8 kHz, `decim ciclos`), depois da revisão do PR #9 (20/10) | 11.602.669 ciclos = 116,0 ms (11,6 % do tempo real), dos quais 102,1 ms no FIR; do `int16` a 51,2 kHz ao escore, 174,5 ms (17,5 %). Seção "Decimação na placa" |
 | Segmento de 1 s na placa, do `int16` ao escore, com `ARM_MATH_LOOPUNROLL` (20/10) | 5.862.057 ciclos = 58,62 ms (5,9 % do tempo real); blocos na seção "Cadeia completa na placa" |
+| Segmento de 1 s na placa, do `int16` ao escore, firmware final (22/10) | 5.855.300 ciclos = 58,55 ms (5,9 % do tempo real), mediana dos 10; blocos na seção "Cadeia completa na placa" |
+| Primeira inferência de ponta a ponta no laço, do `int16` a 51,2 kHz ao escore (22/10) | 17.446.485 ciclos = 174,46 ms (17,4 % do tempo real): decimação 116,03 ms, cadeia 58,44 ms. Seção "Primeira inferência de ponta a ponta" |
 | Decimação de 1 s de áudio na placa, primeira captura (antes da revisão do PR #9, 20/10) | 19.479.794 ciclos = 194,8 ms (19,5 % do tempo real), dos quais 172,1 ms no FIR; do `int16` a 51,2 kHz ao escore, 256,9 ms (25,7 %) |
 | Build padrão com a decimação, depois da revisão do PR #9 (cadeia quadro a quadro, sem o buffer do segundo inteiro, `ARM_MATH_LOOPUNROLL`) | 439.376 B de flash (83,8 %) e 31.536 B de RAM (24,1 %), relatório do linker com o STM32CubeCLT (o build gravado na placa); a decimação ocupa 7.016 B de RAM. Antes da revisão: 436.600 B e 55.744 B |
 | Build padrão com a primeira inferência de ponta a ponta no laço (22/10) | 440.676 B de flash (84,1 %) e 31.648 B de RAM (24,1 %), relatório do linker (gcc 13.2.1); +1.300 B e +112 B sobre o build do PR #9. No `tools/orcamento_memoria.py`, a decimação passa a 6.108 B de flash e 7.125 B de RAM |
