@@ -25,6 +25,10 @@
  * o codigo e 0 e a pontuacao e o limiar vao vazios. Adotar um detector nao muda o
  * formato; mudar o formato exige subir PACOTE_VERSAO.
  *
+ * A origem D (22/10) e um valor novo de um campo que ja existia: os campos e a
+ * ordem nao mudaram, entao a versao continua 1 (o ler_pacotes.py foi atualizado
+ * junto).
+ *
  * Nao usa a HAL: compila no PC (tests/host/test_pacote_serial.c) e na placa.
  */
 
@@ -44,6 +48,8 @@
 typedef enum {
     PACOTE_ORIGEM_REFERENCIA = 'R', /* caracteristicas prontas do Python (marco de 13/10) */
     PACOTE_ORIGEM_CLIPE = 'C',      /* clipe gravado na flash (clipes_demo.h) */
+    PACOTE_ORIGEM_DECIMADO = 'D',   /* recorte de 51,2 kHz da flash, decimado na placa
+                                     * (decimacao.h): do int16 a 51,2 kHz ao escore */
     PACOTE_ORIGEM_AO_VIVO = 'A',    /* microfone; reservado, ainda nao existe */
 } pacote_origem_t;
 
@@ -75,8 +81,8 @@ typedef enum {
 typedef struct {
     uint32_t n;             /* contador desde o boot; o painel ve pacotes perdidos */
     char origem;            /* pacote_origem_t */
-    int32_t clipe;          /* R: gravacao; C: clipe; A: -1 (sai vazio) */
-    int32_t segmento;       /* R: id do segmento no conjunto; C: segmento no clipe */
+    int32_t clipe;          /* R: gravacao; C e D: clipe; A: -1 (sai vazio) */
+    int32_t segmento;       /* R: id do segmento no conjunto; C e D: segmento no clipe */
     uint8_t falha;          /* decisao: 1 = falha, 0 = normal */
     uint8_t disparou;       /* mascara PACOTE_DISPAROU_* */
     float escore_lda;       /* cru, nunca em %; falha se >= 0 */

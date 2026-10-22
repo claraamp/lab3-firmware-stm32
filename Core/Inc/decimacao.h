@@ -55,6 +55,27 @@
  * um bloco de entrada (512 floats) e as saidas de um bloco (128 floats). O recorte
  * em float inteiro (205 KB) nao caberia na RAM.
  *
+ * NO LACO (22/10, primeira inferencia de ponta a ponta). Antes de cada volta dos
+ * 10 segmentos dos clipes, o decimacao_passo() roda o mesmo decimacao_executar(),
+ * do int16 a 51,2 kHz ao escore, acende o LED da decisao por 2 s e manda:
+ *
+ *   ponta seg=29 clipe=normal fs=51200->12800 ref=... placa=... dif=... tol=...
+ *         dec=normal OK ciclos=... (... ms, ...% do tempo real) decimacao=...
+ *         cadeia=... crc32=... igual_boot=1
+ *   $SEG,1,n,D,0,0,N,0,-1331.769,0,,,17453346*HH
+ *
+ * (a primeira numa linha so). E uma inferencia de verdade a cada volta, nao um valor
+ * guardado: o recorte passa de novo pelo FIR e pela cadeia. `igual_boot=1` diz que
+ * ela deu o mesmo int16 (CRC-32) e o mesmo escore, bit a bit, da passada medida no
+ * boot; OK pede isso, a tolerancia encadeada do A4 contra RECORTE_ESCORE_REF_INT16
+ * e a decisao do CSV (normal). Sem OK, a linha e o pacote saem do mesmo jeito, mas
+ * os LEDs piscam o erro em vez de mostrar uma decisao. No pacote, origem D, clipe
+ * e segmento sao os do clipe normal (o recorte e o primeiro segmento dele), e os
+ * ciclos vao do int16 a 51,2 kHz ao escore.
+ *
+ * O RECORTE E UM SEGMENTO DO TREINO DO MODELO FINAL, como os dos clipes: mostra a
+ * fidelidade do porte, nao o desempenho.
+ *
  * A parte sem HAL compila no PC com -DDECIMACAO_HOST (tests/host/test_decimacao.c e
  * tests/host/decimacao/decimar_gravacao.c).
  */
@@ -67,6 +88,7 @@
 
 #include "cadeia_clipes.h"
 #include "clipes_demo.h"
+#include "pacote_serial.h"
 
 /* Maior erro do float32 antes de requantizar, relativo ao pico do segmento
  * (max|y_c - y_py| / max|y_py|, o rel_quadro do A4 com o segmento como um quadro so),
@@ -163,8 +185,30 @@ int decimacao_avaliar(const decimacao_medida_t *m, decimacao_comparacao_t *c);
 uint32_t decimacao_crc32(const int16_t *x, size_t n);
 uint32_t decimacao_crc32_acumular(uint32_t crc, int16_t v);
 
-/* A verificacao inteira, com a saida por `enviar`. Devolve 1 se tudo passou. */
+/* A verificacao inteira, com a saida por `enviar`. Devolve 1 se tudo passou.
+ * Guarda o custo de ler o contador e o resultado da passada medida (CRC e escore)
+ * para o decimacao_inferir() do laco. */
 int decimacao_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, uint32_t clock_hz);
+
+/* Uma inferencia de ponta a ponta no laco. */
+typedef struct {
+    decimacao_medida_t m;   /* a passada: contagens, CRC, escore e ciclos */
+    cadeia_resultado_t r;   /* o escore contra RECORTE_ESCORE_REF_INT16 (normal) */
+    uint8_t igual_boot;     /* mesmo CRC e mesmo escore, bit a bit, da passada do boot */
+    uint8_t ok;             /* contagens certas, escore e decisao do A4 e igual_boot */
+} decimacao_inferencia_t;
+
+/* O recorte de novo pelo decimacao_executar(), do int16 a 51,2 kHz ao escore, com o
+ * custo do contador guardado pela verificacao. Sem a verificacao antes,
+ * igual_boot e ok ficam 0. Devolve 0, ou o codigo do decimacao_executar(). */
+int decimacao_inferir(cadeia_ciclos_fn ciclos, decimacao_inferencia_t *inf);
+
+/* Pacote $SEG de origem D: clipe e segmento do clipe normal, ciclos do int16 a
+ * 51,2 kHz ao escore, sem detector de novidade (codigo 0). */
+void decimacao_pacote(const decimacao_inferencia_t *inf, uint32_t n, pacote_segmento_t *p);
+
+/* Linha `ponta ...` de uma inferencia. Devolve o tamanho, ou -1 se nao coube. */
+int decimacao_linha_ponta(char *buf, size_t n, const decimacao_inferencia_t *inf, uint32_t clock_hz);
 
 /* ---- com HAL (so na placa) ---------------------------------------------- */
 #ifndef DECIMACAO_HOST
@@ -172,6 +216,11 @@ int decimacao_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, ui
  * recorte (a medida, com a cadeia, e a de conferencia) e a serial: a duracao sai na
  * ultima linha. */
 int decimacao_verificar(void);
+
+/* Um passo do laco: se `ok`, a inferencia de ponta a ponta, a linha ponta, o $SEG
+ * de origem D e o LED da decisao (2 s). Se nao, nao faz nada: o cadeia_passo() ja
+ * pisca e avisa o erro. */
+void decimacao_passo(int ok);
 #endif
 
 #endif /* DECIMACAO_H */

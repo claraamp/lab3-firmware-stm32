@@ -69,6 +69,15 @@ static void confere_formato(void)
     pacote_decidir(&p, 10.0f, PACOTE_NOV_PENTE_BPFI, 3.0f, 4.0f);
     confere_linha(&p, "$SEG,1,7,A,,0,F,1,10.000,2,3.000,4.000,412*4C\r\n");
 
+    /* Recorte de 51,2 kHz decimado na placa (22/10): o mesmo formato, origem D */
+    p.n = 0u;
+    p.origem = (char)PACOTE_ORIGEM_DECIMADO;
+    p.clipe = 0;
+    p.segmento = 0;
+    p.ciclos = 17453346u;
+    pacote_decidir(&p, -1331.7700f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    confere_linha(&p, "$SEG,1,0,D,0,0,N,0,-1331.770,0,,,17453346*6C\r\n");
+
     char buf[PACOTE_TAM_MAX];
     pacote_cabecalho(buf, sizeof buf, "exp239", "ee0c3e088366", 26u, 100u);
     CONFERE(strcmp(buf, "$CAB,1,exp239,ee0c3e088366,26,100*3B\r\n") == 0, "cabecalho: %s", buf);

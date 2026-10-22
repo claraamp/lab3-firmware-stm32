@@ -41,6 +41,11 @@ _Static_assert(sizeof linha >= PACOTE_TAM_MAX, "o $SEG e o $CAB tem que caber no
 
 uint16_t cadeia_n_segmentos(void) { return CLIPES_N_SEGMENTOS; }
 
+/* Contador dos $SEG do laco, um so para as origens C e D. */
+static uint32_t n_pacotes = 0u;
+
+uint32_t cadeia_proximo_pacote(void) { return n_pacotes++; }
+
 const char *cadeia_nome_bloco(int b)
 {
     return (b >= 0 && b < CADEIA_N_BLOCOS) ? NOME_BLOCO[b] : "?";
@@ -392,8 +397,7 @@ static void leds(int verde, int vermelho)
     HAL_GPIO_WritePin(LED_R_GPIO_Port, LED_R_Pin, vermelho ? GPIO_PIN_SET : GPIO_PIN_RESET);
 }
 
-/* os dois LEDs juntos, rapido, por 2 s: erro, nunca uma decisao */
-static void piscar_erro(void)
+void cadeia_piscar_erro(void)
 {
     for (int j = 0; j < 16; ++j) {
         leds(j & 1, j & 1);
@@ -419,28 +423,39 @@ int cadeia_verificar(void)
     return ok;
 }
 
-void cadeia_passo(int ok)
+void cadeia_mostrar(const pacote_segmento_t *p)
+{
+    if (p->disparou & PACOTE_ERRO) {
+        cadeia_piscar_erro();   /* escore nao finito: nunca o verde de "normal" */
+    } else {
+        leds(!p->falha, p->falha);
+        HAL_Delay(2000);
+    }
+    leds(0, 0);
+    HAL_Delay(300);
+}
+
+int cadeia_passo(int ok)
 {
     static uint16_t s = 0u;
-    static uint32_t n_pacotes = 0u;
 
     if (!ok) {
-        piscar_erro();
+        cadeia_piscar_erro();
         static const char aviso[] =
             "ERRO: verificacao do marco, da cadeia ou da decimacao falhou (ver as linhas FALHOU acima)\r\n";
         enviar_uart(aviso, sizeof aviso - 1u);
-        return;
+        return 0;
     }
 
     cadeia_resultado_t r;
     if (cadeia_inferir(s, ler_dwt, custo_leitura_dwt, &r) != 0) {
-        piscar_erro();
+        cadeia_piscar_erro();
         static const char aviso[] = "ERRO: mfcc_segmento sem init\r\n";
         enviar_uart(aviso, sizeof aviso - 1u);
-        return;
+        return 0;
     }
     pacote_segmento_t p;
-    cadeia_pacote(s, &r, n_pacotes++, &p);
+    cadeia_pacote(s, &r, cadeia_proximo_pacote(), &p);
 
     int len = cadeia_linha(linha, sizeof linha, "demo", s, &r);
     if (len > 0) {
@@ -451,15 +466,9 @@ void cadeia_passo(int ok)
         enviar_uart(linha, (size_t)len);
     }
 
-    if (p.disparou & PACOTE_ERRO) {
-        piscar_erro();   /* escore nao finito: nunca o verde de "normal" */
-    } else {
-        leds(!p.falha, p.falha);
-        HAL_Delay(2000);
-    }
-    leds(0, 0);
-    HAL_Delay(300);
+    cadeia_mostrar(&p);
     s = (uint16_t)((s + 1u) % CLIPES_N_SEGMENTOS);
+    return s == 0u;   /* acabou a volta */
 }
 
 #endif /* CADEIA_HOST */
