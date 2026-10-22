@@ -33,6 +33,12 @@
  * `demo ...` e o pacote $SEG com origem C, clipe = indice do clipe e segmento =
  * indice do segmento dentro do clipe. Os ciclos do pacote vao do int16 ao escore.
  *
+ * Desde 22/10 (primeira inferencia de ponta a ponta), o laco intercala o caminho
+ * decimado: antes de cada volta dos 10 segmentos, o decimacao_passo() roda o
+ * recorte de 51,2 kHz pela decimacao e pela cadeia (origem D). Os dois usam o mesmo
+ * contador n dos pacotes (cadeia_proximo_pacote) e os mesmos LEDs (cadeia_mostrar),
+ * para o painel ver uma sequencia so, sem salto.
+ *
  * TODOS OS SEGMENTOS DOS CLIPES ESTAO NO TREINO DO MODELO FINAL: a demonstracao
  * mostra a fidelidade do porte (a placa reproduz o Python), nao o desempenho.
  *
@@ -109,6 +115,10 @@ int cadeia_linha(char *buf, size_t n, const char *prefixo, uint16_t s,
  * segmento = indice dentro do clipe, sem detector de novidade (codigo 0). */
 void cadeia_pacote(uint16_t s, const cadeia_resultado_t *r, uint32_t n, pacote_segmento_t *p);
 
+/* O proximo n dos pacotes $SEG do laco (0, 1, 2...), um contador so para as
+ * origens C e D. */
+uint32_t cadeia_proximo_pacote(void);
+
 /* A verificacao inteira (init, 10 segmentos, resumo, CADEIA OK/FALHOU), com a
  * saida por `enviar`. Devolve 1 se os 10 passaram e 0 caso contrario (inclusive
  * se o init falhou). Guarda o custo de ler o contador para o cadeia_passo(). */
@@ -120,8 +130,17 @@ int cadeia_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, uint3
 int cadeia_verificar(void);
 
 /* Um passo do laco principal: se `ok`, o proximo segmento dos clipes nos LEDs
- * (2 s), com a linha demo e o $SEG; senao, os dois LEDs piscam juntos (erro). */
-void cadeia_passo(int ok);
+ * (2 s), com a linha demo e o $SEG; senao, os dois LEDs piscam juntos (erro).
+ * Devolve 1 quando o segmento mostrado foi o ultimo da volta (a proxima chamada
+ * recomeca do primeiro), e 0 nos outros casos, inclusive no erro. */
+int cadeia_passo(int ok);
+
+/* A decisao de um pacote nos LEDs: verde = normal, vermelho = falha, por 2 s, e
+ * 300 ms apagados; com PACOTE_ERRO, os dois piscam juntos. */
+void cadeia_mostrar(const pacote_segmento_t *p);
+
+/* Os dois LEDs juntos, rapido, por 2 s: erro, nunca uma decisao. */
+void cadeia_piscar_erro(void);
 #endif
 
 #endif /* CADEIA_CLIPES_H */

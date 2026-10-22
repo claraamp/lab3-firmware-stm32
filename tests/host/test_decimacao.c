@@ -12,7 +12,10 @@
  *   - a requantizacao satura em vez de dar a volta e arredonda o meio para o par;
  *   - os criterios reprovam quando devem (saida curta, saturada, quadros a menos,
  *     2 LSB, erro em float acima da tolerancia, NaN, passadas diferentes) e nao
- *     reprovam por amostras demais a 1 LSB (empates, revisao da Julia no PR #9).
+ *     reprovam por amostras demais a 1 LSB (empates, revisao da Julia no PR #9);
+ *   - o laco (decimacao_inferir, 22/10): duas inferencias seguidas dao o mesmo int16
+ *     e o mesmo escore, bit a bit, da passada do boot; o $SEG sai com origem D e a
+ *     linha ponta diz OK (e FALHOU sem ok).
  *
  * Com um argumento, grava as 12.800 saidas em float32 (little-endian, em LSB) nesse
  * arquivo, para o comparar_decimacao.py comparar com a referencia em float64:
@@ -126,6 +129,13 @@ int main(int argc, char **argv)
                  "decimacao_executar sem mfcc_estagios_init deveria devolver -3");
     }
 
+    /* 3b. o laco tambem recusa, sem a verificacao do boot */
+    {
+        decimacao_inferencia_t inf;
+        CONFERIR(decimacao_inferir(NULL, &inf) == -3 && !inf.ok && !inf.igual_boot,
+                 "decimacao_inferir antes do init deveria devolver -3, sem ok");
+    }
+
     /* 4. a verificacao da placa, no PC */
     const int ok = decimacao_verificar_com(enviar, ns, 1000000000u);
     CONFERIR(ok == 1, "decimacao_verificar_com devolveu %d", ok);
@@ -226,11 +236,56 @@ int main(int argc, char **argv)
         }
     }
 
+    /* 10. o laco (primeira inferencia de ponta a ponta, 22/10): a inferencia de
+     * novo da o mesmo int16 e o mesmo escore, bit a bit, da passada do boot, e o
+     * pacote sai com origem D e a decisao da referencia (normal) */
+    {
+        static const char PREFIXO_PONTA[] = "ponta seg=29 clipe=normal fs=51200->12800 ";
+        static const char PREFIXO_SEG_D[] = "$SEG,1,41,D,0,0,N,0,-1331.";
+        decimacao_inferencia_t inf;
+        for (int volta = 0; volta < 2; ++volta) {
+            CONFERIR(decimacao_inferir(ns, &inf) == 0, "decimacao_inferir falhou (volta %d)", volta);
+            CONFERIR(inf.igual_boot, "a inferencia do laco nao deu o mesmo da passada do boot (volta %d)",
+                     volta);
+            CONFERIR(inf.ok, "a inferencia do laco deveria passar (volta %d)", volta);
+            CONFERIR(memcmp(&inf.m.escore, &m.escore, sizeof m.escore) == 0,
+                     "escore do laco %.9g, da passada medida %.9g", (double)inf.m.escore,
+                     (double)m.escore);
+            CONFERIR(inf.m.crc32 == m.crc32, "CRC do laco diferente");
+            CONFERIR(!inf.r.falha && inf.r.ok_escore && inf.r.ok_decisao,
+                     "o recorte e normal e tem que bater com a referencia");
+        }
+        pacote_segmento_t p;
+        decimacao_pacote(&inf, 41u, &p);
+        CONFERIR(p.n == 41u && p.origem == 'D' && p.clipe == RECORTE_CLIPE && p.segmento == 0
+                     && !p.falha && p.disparou == 0u && p.ciclos == inf.m.ciclos,
+                 "pacote de origem D com campos errados");
+        char buf[320];
+        int len = pacote_linha(buf, sizeof buf, &p);
+        CONFERIR(len > 0 && strncmp(buf, PREFIXO_SEG_D, strlen(PREFIXO_SEG_D)) == 0, "$SEG: %s", buf);
+        fputs(buf, stdout);
+        len = decimacao_linha_ponta(buf, sizeof buf, &inf, 1000000000u);
+        CONFERIR(len > 0, "linha ponta nao coube");
+        CONFERIR(strncmp(buf, PREFIXO_PONTA, strlen(PREFIXO_PONTA)) == 0
+                     && strstr(buf, " dec=normal OK ") != NULL && strstr(buf, " igual_boot=1\r\n") != NULL,
+                 "linha ponta: %s", buf);
+        fputs(buf, stdout);
+        CONFERIR(decimacao_linha_ponta(buf, 40u, &inf, 1000000000u) == -1,
+                 "buffer pequeno deveria devolver -1");
+
+        /* sem ok, a linha diz FALHOU (o laco pisca o erro em vez de mostrar a decisao) */
+        inf.ok = 0u;
+        inf.igual_boot = 0u;
+        len = decimacao_linha_ponta(buf, sizeof buf, &inf, 1000000000u);
+        CONFERIR(len > 0 && strstr(buf, " FALHOU ") != NULL && strstr(buf, "igual_boot=0") != NULL,
+                 "linha ponta sem ok: %s", buf);
+    }
+
     if (falhas) {
         fprintf(stderr, "TEST DECIMACAO FALHOU (%d)\n", falhas);
         return 1;
     }
     fprintf(stderr, "TEST DECIMACAO OK (fase 0, 12.800 saidas, quadro a quadro = segundo inteiro, "
-                    "reprova quando deve)\n");
+                    "reprova quando deve, laco de ponta a ponta igual ao boot)\n");
     return 0;
 }

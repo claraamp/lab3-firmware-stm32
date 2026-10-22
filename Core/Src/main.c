@@ -196,6 +196,12 @@ int main(void)
    * recorte. Ciclos pelo DWT. Duas decimacoes e a cadeia: a duracao sai na linha
    * DECIMACAO OK. Ver decimacao.h. */
   const int decimacao_ok = decimacao_verificar();
+  const int tudo_ok = marco_ok && cadeia_ok && decimacao_ok;
+
+  /* Primeira inferencia de ponta a ponta (22/10): cada volta do laco comeca pelo
+   * recorte de 51,2 kHz, decimado e passado pela cadeia ate o escore ($SEG de
+   * origem D), e segue pelos 10 segmentos dos clipes (origem C). */
+  int nova_volta = 1;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -210,8 +216,13 @@ int main(void)
      * cabecalhos do modelo incoerentes), os LEDs mostram o padrao de erro mesmo com
      * a CADEIA OK, porque a demonstracao usa o mesmo lda_escore(); e se a
      * decimacao falhar, o firmware gravado tem um erro de porte que so a serial
-     * mostraria, e numa demonstracao ninguem esta olhando a serial. */
-    cadeia_passo(marco_ok && cadeia_ok && decimacao_ok);
+     * mostraria, e numa demonstracao ninguem esta olhando a serial. A mesma trava
+     * vale para o caminho decimado (origem D), que o decimacao_passo() roda no
+     * comeco de cada volta. */
+    if (nova_volta) {
+      decimacao_passo(tudo_ok);
+    }
+    nova_volta = cadeia_passo(tudo_ok);
   }
   /* USER CODE END 3 */
 }

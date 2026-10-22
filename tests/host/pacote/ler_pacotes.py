@@ -10,7 +10,8 @@ Este script e a referencia de leitura para o painel de novembro:
    (hello, fft512, marco13, demo ... e o binario do teste dos blocos 1 a 3, em
    que um byte de float pode valer '$'). Se vir as linhas "b13 ..." desse teste,
    avisa que o firmware foi gravado com -DBLOCOS13=ON;
-3. confere em cada $CAB e $SEG: checksum, versao, numero e tipo dos campos;
+3. confere em cada $CAB e $SEG: checksum, versao, numero e tipo dos campos
+   (origens R, C, D e A; a D, de 22/10, e o recorte de 51,2 kHz decimado na placa);
 4. confere a coerencia da decisao com os sentidos da decisao de 17/10
    (LDA: falha se escore >= 0; novidade: falha se pontuacao > limiar). Na LDA, o
    sinal do texto e sempre o da decisao: todo escore negativo sai com '-',
@@ -52,7 +53,7 @@ CAMPOS_SEG = ("versao", "n", "origem", "clipe", "segmento", "decisao", "disparou
               "escore_lda", "cod_novidade", "pont_novidade", "lim_novidade", "ciclos")
 CAMPOS_CAB = ("versao", "modelo", "json_sha12", "n_features", "clock_mhz")
 
-ORIGENS = {"R": "referencia", "C": "clipe", "A": "ao vivo"}
+ORIGENS = {"R": "referencia", "C": "clipe", "D": "decimado", "A": "ao vivo"}
 NOVIDADE = {0: "nao adotado", 1: "pente BPFO (dB)", 2: "pente BPFI (dB)",
             3: "Mahalanobis2 MFCC", 4: "Mahalanobis2 MFCC+pente"}
 DISPAROU_LDA, DISPAROU_NOVIDADE, ERRO = 1, 2, 4
@@ -279,6 +280,15 @@ def processar(linhas, mostrar=True, saida_csv: Path | None = None):
     modelo = cabecalho["modelo"] if cabecalho else "sem $CAB (aperte o RESET da placa)"
     print(f"resumo: {n_ok} pacotes certos, {n_ruins} descartados, {n_perdidos} perdidos, "
           f"{n_reinicios} reinicios; {len(segmentos)} segmentos; modelo {modelo}")
+    if segmentos:
+        # por origem: quantos segmentos e quantos de cada decisao (D e a de ponta a ponta)
+        partes = []
+        for o in ORIGENS:
+            seg_o = [d for d in segmentos if d["origem"] == o]
+            if seg_o:
+                n_f = sum(d["decisao"] == "F" for d in seg_o)
+                partes.append(f"{o} ({ORIGENS[o]}) {len(seg_o)}: {len(seg_o) - n_f} N, {n_f} F")
+        print("por origem: " + "; ".join(partes))
     return n_ok, n_ruins
 
 
@@ -293,6 +303,7 @@ def autoteste():
         "$SEG,1,7,R,2,1043,N,0,-1577.959,0,,,412*7A",
         "$SEG,1,7,C,0,1,F,2,-1400.000,3,812.250,61.500,412*6D",
         "$SEG,1,7,A,,0,F,1,10.000,2,3.000,4.000,412*4C",
+        "$SEG,1,0,D,0,0,N,0,-1331.770,0,,,17453346*6C",
     ]
 
     def assinar(corpo):

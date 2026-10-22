@@ -48,6 +48,13 @@ static int16_t decimador_quadro[MFCC_N_QUADRO];
 
 /* Um buffer de texto so para o modulo (um contexto so, sem interrupcao). */
 static char linha[320];
+_Static_assert(sizeof linha >= PACOTE_TAM_MAX, "o $SEG tem que caber no buffer");
+
+/* Guardados pela verificacao do boot, para o laco (decimacao_inferir). */
+static uint32_t custo_leitura = 0u;
+static uint8_t boot_valido = 0u;
+static uint32_t boot_crc32 = 0u;
+static float boot_escore = 0.0f;
 
 static uint32_t descontar(uint32_t bruto, uint32_t custo)
 {
@@ -410,6 +417,10 @@ int decimacao_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, ui
         enviar_linha(enviar, len);
         return falhou(enviar);
     }
+    custo_leitura = custo;
+    boot_crc32 = m.crc32;
+    boot_escore = m.escore;
+    boot_valido = 1u;
     decimacao_comparacao_t c;
     const int16_t *ref = clipes[RECORTE_CLIPE].pcm;   /* o segmento 29 e o 1o do clipe normal */
     decimacao_conferir(ref, NULL, NULL, &c);
@@ -475,6 +486,62 @@ int decimacao_verificar_com(cadeia_enviar_fn enviar, cadeia_ciclos_fn ciclos, ui
 }
 
 /* ------------------------------------------------------------------------- */
+/* No laco: a inferencia de ponta a ponta (sem HAL)                           */
+/* ------------------------------------------------------------------------- */
+int decimacao_inferir(cadeia_ciclos_fn ciclos, decimacao_inferencia_t *inf)
+{
+    memset(inf, 0, sizeof *inf);
+    const int st = decimacao_executar(NULL, NULL, ciclos, custo_leitura, &inf->m);
+    if (st != 0) {
+        return st;
+    }
+    const decimacao_medida_t *m = &inf->m;
+    cadeia_comparar(m->escore, RECORTE_ESCORE_REF_INT16, 0u, &inf->r);
+    inf->r.ciclos = m->ciclos;
+    /* bit a bit: a mesma conta, no mesmo recorte, tem que dar o mesmo float */
+    inf->igual_boot = (uint8_t)(boot_valido && m->crc32 == boot_crc32
+                                && memcmp(&m->escore, &boot_escore, sizeof boot_escore) == 0);
+    inf->ok = (uint8_t)(m->n_saidas == DECIM_N_SAIDAS && m->n_total == DECIM_N_SAIDAS_TOTAL
+                        && m->n_saturadas == 0u && m->n_quadros == MFCC_N_QUADROS
+                        && inf->r.ok_escore && inf->r.ok_decisao && inf->igual_boot);
+    return 0;
+}
+
+void decimacao_pacote(const decimacao_inferencia_t *inf, uint32_t n, pacote_segmento_t *p)
+{
+    p->n = n;
+    p->origem = (char)PACOTE_ORIGEM_DECIMADO;
+    p->clipe = (int32_t)RECORTE_CLIPE;
+    p->segmento = 0;   /* o recorte e o primeiro segmento do clipe normal */
+    p->ciclos = inf->m.ciclos;
+    pacote_decidir(p, inf->m.escore, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+}
+
+int decimacao_linha_ponta(char *buf, size_t n, const decimacao_inferencia_t *inf, uint32_t clock_hz)
+{
+    const decimacao_medida_t *m = &inf->m;
+    const cadeia_resultado_t *r = &inf->r;
+    char s_ref[20], s_placa[20], s_dif[20], s_tol[20], s_ms[16], s_pct[16];
+    texto_fixo(s_ref, sizeof s_ref, r->ref, 3);
+    texto_fixo(s_placa, sizeof s_placa, r->escore, 3);
+    texto_fixo(s_dif, sizeof s_dif, r->dif, 6);
+    texto_fixo(s_tol, sizeof s_tol, r->tol, 6);
+    fmt_ms(s_ms, sizeof s_ms, m->ciclos, clock_hz);
+    fmt_pct(s_pct, sizeof s_pct, m->ciclos, clock_hz);
+    const uint32_t c_dec = m->ciclos > m->ciclos_cadeia ? m->ciclos - m->ciclos_cadeia : 0u;
+    const int len = snprintf(buf, n,
+                             "ponta seg=%d clipe=%s fs=%d->%d ref=%s placa=%s dif=%s tol=%s dec=%s %s "
+                             "ciclos=%lu (%s ms, %s%% do tempo real) decimacao=%lu cadeia=%lu "
+                             "crc32=%08lX igual_boot=%u\r\n",
+                             RECORTE_SEGMENTO, clipes[RECORTE_CLIPE].classe, RECORTE_FS_HZ, CLIPES_FS_HZ,
+                             s_ref, s_placa, s_dif, s_tol, r->falha ? "falha" : "normal",
+                             inf->ok ? "OK" : "FALHOU", (unsigned long)m->ciclos, s_ms, s_pct,
+                             (unsigned long)c_dec, (unsigned long)m->ciclos_cadeia,
+                             (unsigned long)m->crc32, (unsigned)inf->igual_boot);
+    return (len < 0 || (size_t)len >= n) ? -1 : len;
+}
+
+/* ------------------------------------------------------------------------- */
 /* Com HAL                                                                    */
 /* ------------------------------------------------------------------------- */
 #ifndef DECIMACAO_HOST
@@ -498,6 +565,40 @@ int decimacao_verificar(void)
     CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
     DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
     return decimacao_verificar_com(enviar_uart, ler_dwt, SystemCoreClock);
+}
+
+void decimacao_passo(int ok)
+{
+    if (!ok) {
+        return;   /* o cadeia_passo() ja pisca e avisa */
+    }
+    static decimacao_inferencia_t inf;   /* estatico, e nao na pilha */
+    const int st = decimacao_inferir(ler_dwt, &inf);
+    if (st != 0) {
+        const int len = snprintf(linha, sizeof linha, "ERRO: decimacao_executar=%d\r\n", st);
+        if (len > 0 && (size_t)len < sizeof linha) {
+            enviar_uart(linha, (size_t)len);
+        }
+        cadeia_piscar_erro();
+        return;
+    }
+    pacote_segmento_t p;
+    decimacao_pacote(&inf, cadeia_proximo_pacote(), &p);
+
+    int len = decimacao_linha_ponta(linha, sizeof linha, &inf, SystemCoreClock);
+    enviar_linha(enviar_uart, len);
+    len = pacote_linha(linha, sizeof linha, &p);
+    if (len > 0) {
+        enviar_uart(linha, (size_t)len);
+    }
+
+    if (inf.ok) {
+        cadeia_mostrar(&p);
+    } else {
+        /* a conta do laco nao bate com a do boot ou com a referencia: um erro de
+         * porte (ou de memoria), nao uma decisao */
+        cadeia_piscar_erro();
+    }
 }
 
 #endif /* DECIMACAO_HOST */

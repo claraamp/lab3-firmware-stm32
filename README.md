@@ -6,7 +6,7 @@ O protótipo em Python (extração de características, treino e escolha do clas
 
 ## Estado atual
 
-O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT), o **marco de 13/10** (a LDA na placa com as características de referência do Python) e, desde 20/10, a **cadeia completa no firmware normal**: os clipes de áudio da flash (`clipes_demo.h`) passam pelo `mfcc_segmento()` e pelo `lda_escore()` na placa, do `int16` à decisão, e a demonstração nos LEDs e o pacote `$SEG` (origem `C`) saem dessa inferência (seção "Cadeia completa na placa"). Também desde 20/10, a **decimação embarcada** (bloco 0): o recorte de 1 s a 51,2 kHz passa pelo `arm_fir_decimate_f32` na placa, é comparado com o `int16` decimado do Python e segue pela mesma cadeia até o escore (seção "Decimação na placa"). O porte do MFCC está em `Core/Src/mfcc_estagios.c` e foi conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"), e na placa pela validação bloco a bloco ([`docs/validacao-blocos.md`](docs/validacao-blocos.md)). Os segmentos dos clipes são os do treino do modelo final: a demonstração mostra a fidelidade do porte, não o desempenho.
+O firmware tem a base da Fase 2 (Frente 1: placa, serial, LEDs, CMSIS-DSP e DWT), o **marco de 13/10** (a LDA na placa com as características de referência do Python) e, desde 20/10, a **cadeia completa no firmware normal**: os clipes de áudio da flash (`clipes_demo.h`) passam pelo `mfcc_segmento()` e pelo `lda_escore()` na placa, do `int16` à decisão, e a demonstração nos LEDs e o pacote `$SEG` (origem `C`) saem dessa inferência (seção "Cadeia completa na placa"). Também desde 20/10, a **decimação embarcada** (bloco 0): o recorte de 1 s a 51,2 kHz passa pelo `arm_fir_decimate_f32` na placa, é comparado com o `int16` decimado do Python e segue pela mesma cadeia até o escore (seção "Decimação na placa"). Desde 22/10, a **primeira inferência de ponta a ponta** roda no laço normal: a cada volta da demonstração, o recorte de 51,2 kHz passa pela decimação e pela cadeia até o escore, acende o LED da decisão e sai na serial como `$SEG` de origem `D` (seção "Primeira inferência de ponta a ponta"). O porte do MFCC está em `Core/Src/mfcc_estagios.c` e foi conferido no PC, estágio a estágio, pelo harness (seção "Harness no PC"), e na placa pela validação bloco a bloco ([`docs/validacao-blocos.md`](docs/validacao-blocos.md)). Os segmentos dos clipes são os do treino do modelo final: a demonstração mostra a fidelidade do porte, não o desempenho.
 
 Ao ligar, a placa:
 
@@ -32,7 +32,7 @@ Ao ligar, a placa:
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
 4. **roda a cadeia completa nos 10 segmentos dos clipes** (`cadeia_verificar()`, ~1,3 s): para cada um, o `mfcc_segmento()` e o `lda_escore()` do `int16` ao escore, conferido com o `escores_referencia.csv` pela tolerância encadeada do escore no A4 (1e-5 relativo), e os ciclos de cada bloco pelo DWT. Termina com o resumo, a mediana de cada bloco e `CADEIA OK` ou `CADEIA FALHOU`, e manda o `$CAB` de novo (seção "Cadeia completa na placa");
 5. **decima o recorte de 51,2 kHz** (`decimacao_verificar()`): confere a fase do `arm_fir_decimate_f32` por um impulso, decima o segmento 29 do clipe normal passando cada passo de quadro pela cadeia até o escore, compara a saída com o `int16` do Python e mede os ciclos. Termina com `DECIMACAO OK duracao=... ms` ou `DECIMACAO FALHOU` (seção "Decimação na placa");
-6. em laço, **demonstração nos LEDs com a cadeia**: os 10 segmentos dos clipes em ordem, cada um processado de novo na hora (`mfcc_segmento()` → `lda_escore()`). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` de origem `C` na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote vão do `int16` ao escore. Se o marco, a cadeia **ou** a decimação falharam, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. A trava nas três conferências é de propósito: se só o marco falhar (a LDA ou os cabeçalhos do modelo incoerentes), a demonstração não roda, mesmo com a `CADEIA OK`, porque ela usa o mesmo `lda_escore()`; e se só a decimação falhar, o firmware tem um erro de porte que só a serial mostraria, e numa demonstração ninguém olha a serial. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
+6. em laço, **demonstração nos LEDs com a cadeia**: cada volta começa pela **inferência de ponta a ponta** (o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, com uma linha `ponta ...` e o `$SEG` de origem `D`; seção "Primeira inferência de ponta a ponta") e segue pelos 10 segmentos dos clipes em ordem, cada um processado de novo na hora (`mfcc_segmento()` → `lda_escore()`). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` de origem `C` na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote vão do `int16` ao escore. Se o marco, a cadeia **ou** a decimação falharam, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. A trava nas três conferências é de propósito: se só o marco falhar (a LDA ou os cabeçalhos do modelo incoerentes), a demonstração não roda, mesmo com a `CADEIA OK`, porque ela usa o mesmo `lda_escore()`; e se só a decimação falhar, o firmware tem um erro de porte que só a serial mostraria, e numa demonstração ninguém olha a serial. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
 
    A demonstração com as características prontas (`marco_lda_passo()`, origem `R`) foi removida em 20/10; o marco ficou só como conferência no boot.
 
@@ -376,16 +376,16 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 |---|---|---|---|
 | 1 | versão | `1` | versão do formato |
 | 2 | n | 0, 1, 2… | contador desde o boot; um salto mostra pacote perdido, e voltar a 0 mostra que a placa reiniciou |
-| 3 | origem | `R`, `C`, `A` | `R`: características de referência do Python (marco de 13/10); `C`: clipe na flash (`clipes_demo.h`); `A`: áudio ao vivo (reservado) |
-| 4 | clipe | inteiro ou vazio | `R`: índice da gravação (`vt_gravacao`); `C`: índice do clipe; `A`: vazio |
-| 5 | segmento | inteiro | `R`: id do segmento no conjunto (`vt_segmento`); `C`: segmento dentro do clipe |
+| 3 | origem | `R`, `C`, `D`, `A` | `R`: características de referência do Python (marco de 13/10); `C`: clipe na flash (`clipes_demo.h`); `D`: recorte de 51,2 kHz da flash, decimado na placa (22/10); `A`: áudio ao vivo (reservado) |
+| 4 | clipe | inteiro ou vazio | `R`: índice da gravação (`vt_gravacao`); `C` e `D`: índice do clipe; `A`: vazio |
+| 5 | segmento | inteiro | `R`: id do segmento no conjunto (`vt_segmento`); `C` e `D`: segmento dentro do clipe (na `D`, 0: o recorte é o primeiro segmento do clipe `normal`) |
 | 6 | decisão | `N`, `F` | normal ou falha (LDA **ou** novidade) |
 | 7 | disparou | `0`–`3` ou `4` | máscara: 0 = nenhum, 1 = LDA, 2 = novidade, 3 = ambos; **4 = erro**, sempre sozinho (ver "Erro" abaixo) |
 | 8 | escore da LDA | 3 casas | valor cru, **falha se ≥ 0**. Não é confiança e nunca vai em % |
 | 9 | código de novidade | `0`–`4` | 0 = não adotado (também no D4); 1 = pente, série BPFO; 2 = pente, série BPFI; 3 = D2 (Mahalanobis² no MFCC); 4 = D3 (Mahalanobis² no MFCC + pente) |
 | 10 | pontuação de novidade | 3 casas ou vazio | vazio com código 0. Em dB no pente, Mahalanobis² no D2/D3 |
 | 11 | limiar de novidade | 3 casas ou vazio | vazio com código 0. **Falha se pontuação > limiar** (estritamente maior) |
-| 12 | ciclos | inteiro | ciclos do DWT do processamento do segmento. Na origem `C`, do `int16` ao escore (`mfcc_segmento()` e `lda_escore()`); na origem `R` (marco), só os do `lda_escore()` |
+| 12 | ciclos | inteiro | ciclos do DWT do processamento do segmento. Na origem `D`, do `int16` a 51,2 kHz ao escore (decimação, cadeia e LDA); na origem `C`, do `int16` a 12,8 kHz ao escore (`mfcc_segmento()` e `lda_escore()`); na origem `R` (marco), só os do `lda_escore()` |
 
 **Sentidos das comparações.** A LDA dá falha com escore **≥ 0** e o detector de novidade com pontuação **> limiar**, os mesmos sentidos do Python. A placa decide pelo `float`. **No escore da LDA, o sinal do texto é sempre o da decisão:** todo escore negativo sai com `-`, inclusive o que arredonda a zero (−0,0004 sai `-0.000`, decisão `N`). O `-0.0f` não é negativo (`-0.0f < 0` é falso), então sai `0.000` e é falha, como no `lda_e_falha()`. Assim, o painel pode ler a decisão da LDA pelo sinal do texto, sem exceção na fronteira; em Python, use o sinal da string, porque `float("-0.000") >= 0` é verdadeiro. O formatador do marco (`texto_fixo()`) continua sem `-0.000`; o `-` é posto só no `pacote_linha()`. Na novidade (campos reservados), quando a pontuação e o limiar arredondam para o mesmo valor, vale o campo de decisão.
 
@@ -396,6 +396,10 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 **O que não vai no pacote:** a razão pontuação ÷ limiar (seria lida como força da detecção) e a consistência entre segmentos ("k de N segmentos recentes indicaram falha"), que o painel calcula a partir da sequência de `$SEG`.
 
 **Os campos de novidade estão reservados, não prometidos.** Enquanto nenhum detector for adotado, o código é 0, e a pontuação e o limiar vão vazios. Adotar um detector não muda o formato; mudar o formato exige subir a versão (`PACOTE_VERSAO`).
+
+**A origem `D` (22/10) não muda a versão:** é um valor novo de um campo que já existia, com os mesmos campos na mesma ordem. O `ler_pacotes.py` foi atualizado junto e, no resumo, conta os segmentos e as decisões por origem. Um leitor da versão 1 anterior a esta mudança recusa o pacote `D` como "origem desconhecida": hoje isso não quebra nada, porque o único leitor é o `ler_pacotes.py`, mas a regra para o painel é aceitar as quatro origens (`R`, `C`, `D`, `A`) e, se aparecer uma origem que ele não conhece, descartar só aquele pacote, sem tratar como pacote corrompido (revisão da Júlia no PR da primeira inferência).
+
+**O pacote `D` e o primeiro `C` de cada volta têm o mesmo clipe e segmento (0, 0):** são o mesmo segundo de áudio por dois caminhos, o `D` a partir do recorte de 51,2 kHz e o `C` a partir do clipe já decimado pelo Python. Isso serve para o painel comparar as duas decisões, mas a chave de um segmento no painel é **origem, clipe e segmento**, nunca só clipe e segmento; senão o par parece um pacote repetido. Pacote repetido de verdade se vê pelo contador `n`.
 
 **Limites.** Com 3 casas, cada número vai até cerca de ±4 × 10⁶; acima disso, sai `inf` (`texto_fixo.h`). Esse limite é o de caber em `uint32_t`, não o de precisão: o `float` tem ~7 dígitos significativos, então acima de ~10.000 a terceira casa já não é confiável. O escore da LDA fica em ±1.600. O id do modelo não pode ter vírgula nem `*`. A maior linha possível cabe em `PACOTE_TAM_MAX` (128 B).
 
@@ -515,6 +519,21 @@ Estes ciclos são da CMSIS-DSP **sem** `ARM_MATH_LOOPUNROLL`. Com ele (desde a r
 | **segmento inteiro (`ciclos`, uma chamada)** | **6.145.466** (61,45 ms) | **5.862.057** (58,62 ms) | **−4,6 %** |
 
 A FFT quase não muda porque o `arm_cfft_f32` não tem a opção; o ganho vem do Mel, da DCT e da janela. O segmento inteiro fica em 5,9 % do tempo real.
+
+**No firmware final (22/10).** Com a primeira inferência de ponta a ponta no laço, a captura de [`docs/primeira-inferencia-22-10.log`](docs/primeira-inferencia-22-10.log) remede a cadeia no build que vai para o relatório. Os escores e as decisões são os mesmos (`CADEIA OK` 10/10, pior caso 6,0 %, `iguais_blocos=10/10`), e o segmento inteiro fica 0,1 % abaixo do de 20/10 (o bloco que mais muda é o resumo, −1,3 %, 640 ciclos), dentro da variação entre builds:
+
+| Bloco | Com `ARM_MATH_LOOPUNROLL` (20/10) | Firmware final (22/10) | ms a 100 MHz (22/10) |
+|---|---:|---:|---:|
+| janela | 976.569 | 976.689 | 9,77 |
+| espectro | 3.950.910 | 3.944.931 | 39,45 |
+| Mel | 361.998 | 362.546 | 3,63 |
+| log | 296.205 | 296.749 | 2,97 |
+| DCT | 196.612 | 196.611 | 1,97 |
+| resumo (Welford) | 49.052 | 48.412 | 0,48 |
+| média e desvio | 645 | 650 | 0,007 |
+| LDA | 242 | 241 | 0,002 |
+| soma dos blocos | 5.832.233 | 5.826.829 | 58,27 |
+| **segmento inteiro (`ciclos`, uma chamada)** | **5.862.057** (58,62 ms) | **5.855.300** (58,55 ms) | 5,9 % do tempo real |
 
 - **Escore:** 10/10 dentro da tolerância e com as decisões do CSV; pior caso 6,0 % da tolerância (`bpfi_1.0mm_seg0148`, diferença de 0,0009). A passada de medida deu bit a bit as mesmas 26 características nos 10 segmentos (`iguais_blocos=10/10`).
 - **Tempo:** 61,45 ms por segundo de áudio, ou **6,1 % do tempo real**, com variação de 0,05 % entre segmentos. É o mesmo número da validação do segmento completo (6,145 M ciclos, 19/10).
@@ -664,6 +683,79 @@ DECIMACAO OK
 - A conversão e a requantização somaram ~44 ciclos por amostra de entrada: a divisão `int16 / 32767` (51.348 vezes) e o `lrintf` em software (12.800 vezes).
 - A cadeia no mesmo boot ficou 1,2 % acima da captura de 19/10 (6.217.706 contra 6.145.466 ciclos), sem mudança no código dela; provavelmente pela posição do código na flash (não confirmado). Para o relatório, vale citar a variação de ~1 a 2 % entre builds.
 
+## Primeira inferência de ponta a ponta
+
+Card "Primeira inferência on-device funcionando" (meta física da Fase 2: cadeia portada, com a primeira inferência executando no microcontrolador). Junta as duas pontas que já rodavam separadas: a cadeia no laço, sobre os clipes de 12,8 kHz (desde 19/10), e a decimação, só no boot (desde 20/10). Agora o **laço normal do firmware** faz o caminho inteiro, sem opção de CMake:
+
+```
+recorte_51200 (int16, 51,2 kHz, flash) → decimação (FIR de 147, fator 4) → cadeia quadro a quadro
+  → lda_escore() → decisão → LED (2 s) e $SEG de origem D
+```
+
+Cada volta da demonstração começa por esse caminho e segue pelos 10 segmentos dos clipes (origem `C`), com um contador `n` só para as duas origens. É uma inferência de verdade a cada volta, não um valor guardado: o `decimacao_passo()` chama o mesmo `decimacao_executar()` do boot, que passa o recorte de novo pelo `arm_fir_decimate_f32` e pela cadeia. Uma volta leva cerca de 25 s (11 segmentos de 2,3 s), e o primeiro `$SEG` depois do boot é o de origem `D`.
+
+Na serial, a cada volta (a linha `ponta` numa linha só):
+
+```
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=... tol=0.013318 dec=normal OK
+      ciclos=... (... ms, ...% do tempo real) decimacao=... cadeia=... crc32=... igual_boot=1
+$SEG,1,0,D,0,0,N,0,-1331.769,0,,,...*HH
+```
+
+- **`OK`** pede três coisas: as contagens da decimação certas (12.800 saídas, sem saturar, 98 quadros); o escore dentro da tolerância encadeada do A4 contra `RECORTE_ESCORE_REF_INT16`, com a decisão da referência (normal); e **`igual_boot=1`**, o mesmo `int16` (CRC-32) e o mesmo escore, bit a bit, da passada medida no boot. Sem `OK`, a linha e o pacote saem do mesmo jeito, mas os LEDs piscam o erro em vez de mostrar uma decisão.
+- **`ciclos`** vão do `int16` a 51,2 kHz ao escore, os mesmos do campo 12 do `$SEG`; `decimacao` e `cadeia` são as duas partes, como na linha `decim ciclos` do boot.
+- **O recorte é um segmento do treino do modelo final**, como os dos clipes: a inferência mostra a fidelidade do porte, não o desempenho.
+
+**Fora deste card:** o painel no computador (23/11) e o áudio contínuo de vários segundos a 51,2 kHz, que a flash não comporta (o recorte de 1 s já ocupa 103 KB).
+
+### Testar no PC
+
+O `test_decimacao` (seção "Decimação na placa") roda duas inferências seguidas pelo `decimacao_inferir()`, depois da verificação, e confere que dão o mesmo `int16` e o mesmo escore, bit a bit, da passada do boot, que o `$SEG` sai com origem `D` e a decisão normal, e que a linha `ponta` diz `OK` (e `FALHOU` sem ele). O `test_pacote_serial` confere a linha exata de origem `D`, e o `ler_pacotes.py --autoteste` a aceita.
+
+### Capturar na placa
+
+Grave o build padrão (Debug) e capture a serial do RESET até pelo menos duas voltas (~60 s), num arquivo novo:
+
+```bash
+rm -f build/primeira_inferencia.txt
+python3 tests/host/pacote/ler_pacotes.py --porta /dev/ttyUSB0 --segundos 60 --salvar build/primeira_inferencia.txt
+python3 tests/host/pacote/ler_pacotes.py --arquivo build/primeira_inferencia.txt --resumo
+```
+
+Aperte o RESET logo depois de abrir, para pegar o boot inteiro (`MARCO OK`, `CADEIA OK`, `DECIMACAO OK` e os `$CAB`). O resumo tem que dar 0 descartados e 0 perdidos, e a linha "por origem" mostra os pacotes `D` (todos `N`) e `C`.
+
+### Resultado na placa
+
+Captura de 22/10 (build Debug padrão, sem `BLOCOS13`, `VALIDACAO_PLACA` nem `ORCAMENTO`), versionada em [`docs/primeira-inferencia-22-10.log`](docs/primeira-inferencia-22-10.log): um boot, do `hello frente1` a três voltas do laço (60 s). No mesmo boot, `MARCO OK` (295/295), `CADEIA OK` (10/10) e `DECIMACAO OK`. O resumo dos pacotes sai de novo com:
+
+```bash
+python3 tests/host/pacote/ler_pacotes.py --arquivo docs/primeira-inferencia-22-10.log --resumo
+```
+
+```
+resumo: 25 pacotes certos, 0 descartados, 0 perdidos, 0 reinicios; 23 segmentos; modelo exp239
+por origem: C (clipe) 20: 4 N, 16 F; D (decimado) 3: 3 N, 0 F
+```
+
+As três inferências de ponta a ponta:
+
+```
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446485 (174.46 ms, 17.4% do tempo real) decimacao=11602884 cadeia=5843601 crc32=E4DD7E31 igual_boot=1
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446414 (174.46 ms, 17.4% do tempo real) decimacao=11602704 cadeia=5843710 crc32=E4DD7E31 igual_boot=1
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17446451 (174.46 ms, 17.4% do tempo real) decimacao=11602724 cadeia=5843727 crc32=E4DD7E31 igual_boot=1
+```
+
+| Etapa (1 s de áudio, inferência no laço) | Ciclos (1ª volta) | ms a 100 MHz | % do tempo real |
+|---|---:|---:|---:|
+| decimação (FIR, conversão e requantização) | 11.602.884 | 116,03 | 11,6 % |
+| cadeia (MFCC e LDA, quadro a quadro) | 5.843.601 | 58,44 | 5,8 % |
+| **do `int16` a 51,2 kHz ao escore** | **17.446.485** | **174,46** | **17,4 %** |
+
+- **Fidelidade:** as três inferências deram o mesmo `int16` (CRC `E4DD7E31`) e o mesmo escore da passada do boot, bit a bit (`igual_boot=1`). O escore fica a 8,3 % da tolerância encadeada do A4 (0,001099 de 0,013318), com a decisão da referência (normal), como no boot de 20/10.
+- **Pacotes:** os 23 `$SEG` (3 `D` e 20 `C`) saíram numa sequência só, `n` de 0 a 22, sem perda nem pacote descartado; os 3 `D` são normais e os `C` têm as decisões do CSV (4 normais, 16 falhas).
+- **Tempo:** 174,46 ms do `int16` a 51,2 kHz ao escore, com variação de 71 ciclos entre as voltas (< 0,001 %). É o mesmo número da passada medida no boot (`decim ciclos total=17446493`). A cadeia dentro da decimação (5.843.601) fica 0,2 % abaixo da cadeia dos clipes no mesmo boot (5.855.300): a medida aqui não inclui o laço dos quadros.
+- **Meta física da Fase 2:** cadeia portada, com a inferência executando no microcontrolador do áudio na taxa original até a decisão nos LEDs e na serial.
+
 ## Validação bloco a bloco
 
 A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
@@ -683,8 +775,11 @@ A validação independente da cadeia em C (card "Validar cada bloco da cadeia em
 | Segmento de 1 s na placa, do `int16` ao escore (`cadeia resumo`, mediana dos 10) | 6.145.466 ciclos = 61,45 ms (6,1 % do tempo real); blocos na seção "Cadeia completa na placa" |
 | Decimação de 1 s de áudio na placa (51,2 → 12,8 kHz, `decim ciclos`), depois da revisão do PR #9 (20/10) | 11.602.669 ciclos = 116,0 ms (11,6 % do tempo real), dos quais 102,1 ms no FIR; do `int16` a 51,2 kHz ao escore, 174,5 ms (17,5 %). Seção "Decimação na placa" |
 | Segmento de 1 s na placa, do `int16` ao escore, com `ARM_MATH_LOOPUNROLL` (20/10) | 5.862.057 ciclos = 58,62 ms (5,9 % do tempo real); blocos na seção "Cadeia completa na placa" |
+| Segmento de 1 s na placa, do `int16` ao escore, firmware final (22/10) | 5.855.300 ciclos = 58,55 ms (5,9 % do tempo real), mediana dos 10; blocos na seção "Cadeia completa na placa" |
+| Primeira inferência de ponta a ponta no laço, do `int16` a 51,2 kHz ao escore (22/10) | 17.446.485 ciclos = 174,46 ms (17,4 % do tempo real): decimação 116,03 ms, cadeia 58,44 ms. Seção "Primeira inferência de ponta a ponta" |
 | Decimação de 1 s de áudio na placa, primeira captura (antes da revisão do PR #9, 20/10) | 19.479.794 ciclos = 194,8 ms (19,5 % do tempo real), dos quais 172,1 ms no FIR; do `int16` a 51,2 kHz ao escore, 256,9 ms (25,7 %) |
 | Build padrão com a decimação, depois da revisão do PR #9 (cadeia quadro a quadro, sem o buffer do segundo inteiro, `ARM_MATH_LOOPUNROLL`) | 439.376 B de flash (83,8 %) e 31.536 B de RAM (24,1 %), relatório do linker com o STM32CubeCLT (o build gravado na placa); a decimação ocupa 7.016 B de RAM. Antes da revisão: 436.600 B e 55.744 B |
+| Build padrão com a primeira inferência de ponta a ponta no laço (22/10) | 440.676 B de flash (84,1 %) e 31.648 B de RAM (24,1 %), relatório do linker (gcc 13.2.1); +1.300 B e +112 B sobre o build do PR #9. No `tools/orcamento_memoria.py`, a decimação passa a 6.108 B de flash e 7.125 B de RAM |
 
 As linhas "firmware até 19/10" são o build padrão antes da integração da cadeia completa: ele ainda não chamava o `mfcc_segmento()` (só o teste dos blocos 1 a 3, desligado por padrão, chama o `mfcc_estagios_init()`), e o `--gc-sections` tira a cadeia do link. Por isso a RAM não mostra os ~11 KB estáticos da cadeia; eles entram quando a integração na placa chamar o `mfcc_segmento()`. A medida é a mesma de antes (build Debug, relatório do linker). A flash era 24.592 B em 13/10, antes do marco; a diferença, ~36 KB, são os vetores de teste do marco (`lda_vetores_teste.h`, 34.250 B) e o código do marco e da LDA.
 
@@ -736,4 +831,5 @@ Resultado em 20/10 (build Debug com gcc 13.2.1, branch da cadeia completa, depoi
 - **13 a 19/10:** porte da cadeia de DSP (janela, FFT, MFCC) para C, com verificação bloco a bloco contra as referências em Python, e definição do formato do pacote da serial.
 - **19/10:** cadeia completa no firmware normal (clipes → MFCC → LDA → LEDs e `$SEG` de origem `C`), com os ciclos de cada bloco na placa.
 - **20/10:** decimação embarcada (bloco 0) sobre o recorte de 51,2 kHz, passada pela cadeia quadro a quadro e comparada com o Python, com os ciclos pelo DWT. Na revisão do PR #9: `ARM_MATH_LOOPUNROLL` na CMSIS-DSP, a conta em LSB com o `vcvtr` e as tolerâncias medidas nos 295 segmentos.
-- **Depois:** a primeira inferência on-device (27/10).
+- **22/10:** primeira inferência de ponta a ponta no laço normal: o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, a cada volta da demonstração, com o LED da decisão e o `$SEG` de origem `D`.
+- **Depois:** caracterização completa de tempo e memória (novembro), o detector de novidade se for adotado (03/11) e o painel no computador (23/11).
