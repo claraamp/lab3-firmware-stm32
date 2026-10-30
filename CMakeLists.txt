@@ -101,14 +101,16 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/decimacao.c
     # CRC-32 do zlib, comum ao blocos13, a decimacao e a recepcao pela serial
     Core/Src/crc32.c
-    # recepcao de segmentos pela serial (29/10): o parser do quadro, em fluxo
+    # recepcao de segmentos pela serial (29/10): o parser do quadro, em fluxo, e o
+    # modo de recepcao na placa (USART1 com o DMA2 Stream2 circular)
     Core/Src/recepcao.c
+    Core/Src/recepcao_serial.c
 )
 # Marco de 13/10 (LDA na placa), estagios do MFCC, a cadeia completa e a decimacao:
 # sempre otimizados, inclusive no Debug, para o tempo medido pelo DWT ser o do
 # firmware final, como o CMSIS-DSP
 set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c Core/Src/cadeia_clipes.c
-    Core/Src/decimacao.c Core/Src/crc32.c Core/Src/recepcao.c
+    Core/Src/decimacao.c Core/Src/crc32.c Core/Src/recepcao.c Core/Src/recepcao_serial.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Teste dos blocos 1 a 3 na placa (janela, espectro e Mel; Core/Src/blocos13.c):

@@ -126,6 +126,25 @@ int pacote_linha(char *buf, size_t n, const pacote_segmento_t *p)
     return fechar(buf, n, len);
 }
 
+int pacote_pedido(char *buf, size_t n, uint32_t pedido)
+{
+    const int len = snprintf(buf, n, "$PED,%d,%lu", PACOTE_VERSAO, (unsigned long)pedido);
+    return fechar(buf, n, len);
+}
+
+int pacote_erro_recepcao(char *buf, size_t n, int tem_id, uint16_t grupo, uint32_t id,
+                         const char *motivo)
+{
+    int len;
+    if (tem_id) {
+        len = snprintf(buf, n, "$ERR,%d,%u,%lu,%s", PACOTE_VERSAO, (unsigned)grupo,
+                       (unsigned long)id, motivo);
+    } else {
+        len = snprintf(buf, n, "$ERR,%d,,,%s", PACOTE_VERSAO, motivo);
+    }
+    return fechar(buf, n, len);
+}
+
 int pacote_cabecalho(char *buf, size_t n, const char *modelo_id, const char *json_sha12,
                      unsigned n_features, unsigned clock_mhz)
 {

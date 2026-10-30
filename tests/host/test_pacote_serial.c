@@ -78,6 +78,31 @@ static void confere_formato(void)
     pacote_decidir(&p, -1331.7700f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
     confere_linha(&p, "$SEG,1,0,D,0,0,N,0,-1331.770,0,,,17453346*6C\r\n");
 
+    /* Segmento mandado pelo PC (30/10): origem S, clipe = grupo, segmento = id */
+    p.n = 812u;
+    p.origem = (char)PACOTE_ORIGEM_SERIAL;
+    p.clipe = 2;
+    p.segmento = 117;
+    p.ciclos = 1043210u;
+    pacote_decidir(&p, -1.2341f, PACOTE_NOV_NAO_ADOTADO, 0.0f, 0.0f);
+    confere_linha(&p, "$SEG,1,812,S,2,117,N,0,-1.234,0,,,1043210*71\r\n");
+
+    /* $PED e $ERR do modo de recepcao, nos limites dos campos */
+    char lp[PACOTE_TAM_MAX];
+    CONFERE(pacote_pedido(lp, sizeof lp, 1u) > 0 && strcmp(lp, "$PED,1,1*51\r\n") == 0, "pedido: %s", lp);
+    CONFERE(pacote_pedido(lp, sizeof lp, 4294967295u) > 0 && strcmp(lp, "$PED,1,4294967295*6D\r\n") == 0,
+            "pedido maximo: %s", lp);
+    CONFERE(pacote_erro_recepcao(lp, sizeof lp, 1, 2u, 118u, "crc") > 0 && strcmp(lp, "$ERR,1,2,118,crc*0C\r\n") == 0,
+            "erro: %s", lp);
+    CONFERE(pacote_erro_recepcao(lp, sizeof lp, 0, 7u, 9u, "truncado") > 0
+                && strcmp(lp, "$ERR,1,,,truncado*60\r\n") == 0,
+            "erro sem id: %s", lp);
+    CONFERE(pacote_erro_recepcao(lp, sizeof lp, 1, 65535u, 2147483647u, "tamanho") > 0
+                && strcmp(lp, "$ERR,1,65535,2147483647,tamanho*3E\r\n") == 0,
+            "erro maximo: %s", lp);
+    CONFERE(pacote_pedido(lp, 8u, 1u) == -1 && pacote_erro_recepcao(lp, 10u, 1, 2u, 118u, "crc") == -1,
+            "buffer pequeno nao recusou $PED/$ERR");
+
     char buf[PACOTE_TAM_MAX];
     pacote_cabecalho(buf, sizeof buf, "exp239", "ee0c3e088366", 26u, 100u);
     CONFERE(strcmp(buf, "$CAB,1,exp239,ee0c3e088366,26,100*3B\r\n") == 0, "cabecalho: %s", buf);

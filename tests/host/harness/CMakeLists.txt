@@ -177,3 +177,26 @@ foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emul
         target_compile_definitions(${alvo} PRIVATE _CRT_SECURE_NO_WARNINGS)
     endif()
 endforeach()
+
+# Modo de recepcao da placa num pseudo-terminal (tests/host/recepcao/emular_placa.c):
+# o Core/Src/recepcao_serial.c de verdade, contra uma HAL de mentira (stub/), para o
+# enviar_segmento.py conversar com ele sem a placa. So no Linux e no macOS.
+if(UNIX)
+    find_package(Threads REQUIRED)
+    add_executable(emular_placa
+        ${RAIZ}/tests/host/recepcao/emular_placa.c
+        ${RAIZ}/Core/Src/recepcao_serial.c
+        ${RAIZ}/Core/Src/recepcao.c
+        ${RAIZ}/Core/Src/crc32.c
+        ${RAIZ}/Core/Src/cadeia_clipes.c
+        ${RAIZ}/Core/Src/mfcc_estagios.c
+        ${RAIZ}/Core/Src/clipes_demo.c
+        ${RAIZ}/Core/Src/pacote_serial.c
+        ${RAIZ}/Core/Src/texto_fixo.c
+    )
+    # o stub/ vem antes do Core/Inc: o main.h e o usart.h de mentira
+    target_include_directories(emular_placa PRIVATE ${RAIZ}/tests/host/recepcao/stub ${RAIZ}/Core/Inc)
+    target_compile_definitions(emular_placa PRIVATE CADEIA_HOST)
+    target_link_libraries(emular_placa PRIVATE cmsisdsp_host m Threads::Threads)
+    target_compile_options(emular_placa PRIVATE -Wall -Wextra -Wdouble-promotion)
+endif()

@@ -8,8 +8,11 @@
  *   - bytes a mais depois do quadro so sao contados;
  *   - CRC errado (no corpo, num campo do cabecalho coberto pelo CRC, no proprio CRC)
  *     vira erro "crc" so no fim, sem caracteristicas;
- *   - magica, versao, formato (inclusive o 2, reservado) e n_amostras errados viram
- *     erro assim que o cabecalho chega, e o resto e descartado;
+ *   - o que vem antes da magica (um "RECEBER\n" atrasado, falsos comecos "Q", "QS",
+ *     "QSE") e ignorado, e o quadro que vem atras sai bit a bit; um quadro com a
+ *     magica corrompida e ignorado inteiro, sem erro e sem timeout;
+ *   - versao, formato (inclusive o 2, reservado) e n_amostras errados viram erro
+ *     assim que o cabecalho chega, e o resto e descartado;
  *   - truncado: RECEPCAO_SILENCIO_MS sem bytes no meio do quadro (no cabecalho ou no
  *     corpo), e um ms antes nao;
  *   - depois de um erro, so o silencio libera o proximo pedido, e um byte no meio
@@ -80,8 +83,9 @@ static const int16_t *pcm_segmento(int s)
 }
 
 /* Entrega `n` bytes em pedacos com os tamanhos de `pedacos` (em ciclo), todos no
- * instante `t`. Devolve o estado depois do ultimo; *antes guarda se algum pedaco
- * antes do ultimo ja saiu de EM_ANDAMENTO. */
+ * instante `t`. Devolve o estado depois do ultimo; *saiu_antes guarda se algum
+ * pedaco antes do ultimo ja terminou o quadro (completo ou erro). Esperando (a
+ * magica ainda incompleta, com pedacos de 1 a 3 bytes) e normal. */
 static recepcao_estado_t entregar(const uint8_t *b, size_t n, const size_t *pedacos, size_t n_pedacos,
                                   uint32_t t, int *saiu_antes)
 {
@@ -95,7 +99,7 @@ static recepcao_estado_t entregar(const uint8_t *b, size_t n, const size_t *peda
         }
         e = recepcao_receber(&r, &b[i], m, t);
         i += m;
-        if (i < n && e != RECEPCAO_EM_ANDAMENTO) {
+        if (i < n && e != RECEPCAO_EM_ANDAMENTO && e != RECEPCAO_ESPERANDO) {
             *saiu_antes = 1;
         }
     }
@@ -182,14 +186,49 @@ static void teste_crc(size_t pos, const char *onde)
     CONFERIR(recepcao_caracteristicas(&r, x) == -1, "crc (%s): caracteristicas sairam com CRC errado", onde);
 }
 
+/* Lixo antes da magica e ignorado, e o quadro de tras sai inteiro e bit a bit. */
+static void teste_antes_da_magica(void)
+{
+    static uint8_t buf[64 + RECEPCAO_TAM_QUADRO];
+    /* falsos comecos de todos os tipos; o "QS" do fim faz o 'Q' do quadro de verdade
+     * ser o byte que desfaz o falso comeco (e tem de recomecar a magica) */
+    static const char lixo[] = "RECEBER\nQRECEBER\nQSQSE\x00QQ\x01QS";   /* sem o '\0' final */
+    const size_t n_lixo = sizeof lixo - 1u;
+    const int16_t *pcm = pcm_segmento(4);
+    float ref[2 * MFCC_N_COEFS];
+    mfcc_segmento(pcm, ref);
+    montar(pcm, 9, 147u, 1, 1, RECEPCAO_N_AMOSTRAS);
+    memcpy(buf, lixo, n_lixo);
+    memcpy(&buf[n_lixo], quadro, RECEPCAO_TAM_QUADRO);
+    for (size_t corte = 1; corte <= n_lixo + 6u; ++corte) {   /* corta o lixo e a magica em todo ponto */
+        recepcao_iniciar(&r, NULL, 0u);
+        recepcao_estado_t e = recepcao_receber(&r, buf, corte, 10u);
+        CONFERIR(e == RECEPCAO_ESPERANDO || corte > n_lixo + 3u, "lixo cortado em %zu: estado %d", corte, (int)e);
+        if (e == RECEPCAO_ESPERANDO) {   /* depois da magica, o silencio trunca (e o certo) */
+            CONFERIR(recepcao_tempo(&r, 10u + 10u * RECEPCAO_SILENCIO_MS) == e, "lixo: timeout esperando a magica");
+        }
+        e = recepcao_receber(&r, &buf[corte], n_lixo + RECEPCAO_TAM_QUADRO - corte, 3000u);
+        CONFERIR(e == RECEPCAO_COMPLETO, "lixo cortado em %zu: o quadro nao completou (estado %d)", corte, (int)e);
+        CONFERIR(r.n_ignorados == n_lixo, "lixo: %lu ignorados, esperados %zu", (unsigned long)r.n_ignorados,
+                 n_lixo);
+        float x[2 * MFCC_N_COEFS];
+        CONFERIR(recepcao_caracteristicas(&r, x) == 0 && memcmp(x, ref, sizeof x) == 0,
+                 "lixo cortado em %zu: caracteristicas diferentes", corte);
+    }
+
+    /* magica corrompida: o quadro inteiro e ignorado, sem erro e sem timeout */
+    quadro[3] = 'H';
+    recepcao_iniciar(&r, NULL, 0u);
+    recepcao_estado_t e = recepcao_receber(&r, quadro, RECEPCAO_TAM_QUADRO, 10u);
+    CONFERIR(e == RECEPCAO_ESPERANDO && r.n_bytes < 4u, "magica corrompida: estado %d", (int)e);
+    CONFERIR(recepcao_tempo(&r, 10u + RECEPCAO_SILENCIO_MS) == RECEPCAO_ESPERANDO,
+             "magica corrompida virou timeout");
+}
+
 /* Cabecalho errado: erro assim que o 18o byte chega, e o resto e descartado. */
-static void teste_cabecalho(uint8_t versao, uint8_t formato, uint16_t n_amostras, int estragar_magica,
-                            recepcao_motivo_t esperado)
+static void teste_cabecalho(uint8_t versao, uint8_t formato, uint16_t n_amostras, recepcao_motivo_t esperado)
 {
     montar(pcm_segmento(1), 3, 99u, versao, formato, n_amostras);
-    if (estragar_magica) {
-        quadro[3] = 'H';
-    }
     recepcao_iniciar(&r, NULL, 0u);
     recepcao_estado_t e = recepcao_receber(&r, quadro, 17u, 1u);
     CONFERIR(e == RECEPCAO_EM_ANDAMENTO, "cabecalho %s: erro antes do 18o byte",
@@ -199,12 +238,8 @@ static void teste_cabecalho(uint8_t versao, uint8_t formato, uint16_t n_amostras
              recepcao_motivo_texto(r.motivo), recepcao_motivo_texto(esperado));
     CONFERIR(r.n_descartados == 100u, "cabecalho %s: %lu descartados, esperados 100",
              recepcao_motivo_texto(esperado), (unsigned long)r.n_descartados);
-    if (estragar_magica) {
-        CONFERIR(!r.tem_id, "magica errada com grupo/id");
-    } else {
-        CONFERIR(r.tem_id && r.grupo == 3 && r.id == 99u, "cabecalho %s: grupo/id errados",
-                 recepcao_motivo_texto(esperado));
-    }
+    CONFERIR(r.tem_id && r.grupo == 3 && r.id == 99u, "cabecalho %s: grupo/id errados",
+             recepcao_motivo_texto(esperado));
 }
 
 static void teste_truncado(void)
@@ -221,7 +256,7 @@ static void teste_truncado(void)
              recepcao_motivo_texto(r.motivo));
     CONFERIR(r.tem_id && r.id == 55u, "truncado no corpo sem o id");
 
-    /* no cabecalho: sem grupo e id */
+    /* no cabecalho, depois da magica: sem grupo e id */
     recepcao_iniciar(&r, NULL, 0u);
     recepcao_receber(&r, quadro, 10u, 50u);
     CONFERIR(recepcao_tempo(&r, 50u + RECEPCAO_SILENCIO_MS) == RECEPCAO_SILENCIO && r.motivo == RECEPCAO_E_TRUNCADO
@@ -281,11 +316,11 @@ int main(void)
     teste_crc(6u, "grupo no cabecalho");
     teste_crc(15u, "o proprio CRC");
     teste_crc(RECEPCAO_TAM_QUADRO - 1u, "ultimo byte");
-    teste_cabecalho(1, 1, RECEPCAO_N_AMOSTRAS, 1, RECEPCAO_E_MAGICA);
-    teste_cabecalho(2, 1, RECEPCAO_N_AMOSTRAS, 0, RECEPCAO_E_VERSAO);
-    teste_cabecalho(1, 2, RECEPCAO_N_AMOSTRAS, 0, RECEPCAO_E_FORMATO);
-    teste_cabecalho(1, 0, RECEPCAO_N_AMOSTRAS, 0, RECEPCAO_E_FORMATO);
-    teste_cabecalho(1, 1, 12799u, 0, RECEPCAO_E_TAMANHO);
+    teste_antes_da_magica();
+    teste_cabecalho(2, 1, RECEPCAO_N_AMOSTRAS, RECEPCAO_E_VERSAO);
+    teste_cabecalho(1, 2, RECEPCAO_N_AMOSTRAS, RECEPCAO_E_FORMATO);
+    teste_cabecalho(1, 0, RECEPCAO_N_AMOSTRAS, RECEPCAO_E_FORMATO);
+    teste_cabecalho(1, 1, 12799u, RECEPCAO_E_TAMANHO);
     teste_truncado();
     teste_silencio_depois_do_erro();
 
@@ -293,7 +328,7 @@ int main(void)
         fprintf(stderr, "TEST RECEPCAO FALHOU (%d)\n", falhas);
         return 1;
     }
-    fprintf(stderr, "TEST RECEPCAO OK (10 segmentos bit a bit em 5 padroes de pedacos, a mais, crc, cabecalho, "
-                    "truncado, silencio)\n");
+    fprintf(stderr, "TEST RECEPCAO OK (10 segmentos bit a bit em 5 padroes de pedacos, lixo antes da magica, a mais, "
+                    "crc, cabecalho, truncado, silencio)\n");
     return 0;
 }

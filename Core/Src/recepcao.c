@@ -34,6 +34,8 @@ _Static_assert(RECEPCAO_TAM_QUADRO == 25618u, "quadro de 18 + 25.600 B");
         BARREIRA();                                      \
     } while (0)
 
+static const char MAGICA[4] = {'Q', 'S', 'E', 'G'};
+
 static uint16_t le16(const uint8_t *p)
 {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
@@ -65,11 +67,8 @@ static void erro(recepcao_t *r, recepcao_motivo_t motivo, uint32_t agora_ms)
  * RECEPCAO_OK. */
 static recepcao_motivo_t conferir_cabecalho(recepcao_t *r)
 {
-    const uint8_t *c = r->cab;
-    if (memcmp(c, "QSEG", 4) != 0) {
-        return RECEPCAO_E_MAGICA;
-    }
-    /* com a magica certa, o grupo e o id vao no $ERR, mesmo que o resto esteja errado */
+    const uint8_t *c = r->cab;   /* a magica ja foi achada pelo recepcao_receber() */
+    /* o grupo e o id vao no $ERR, mesmo que o resto esteja errado */
     r->tem_id = 1u;
     r->grupo = le16(&c[6]);
     r->id = le32(&c[8]);
@@ -125,14 +124,36 @@ recepcao_estado_t recepcao_receber(recepcao_t *r, const uint8_t *dados, size_t n
         r->n_descartados += (uint32_t)n;
         return r->estado;
     case RECEPCAO_ESPERANDO:
-        r->inicio_ms = agora_ms;
-        r->estado = RECEPCAO_EM_ANDAMENTO;
-        break;
     case RECEPCAO_EM_ANDAMENTO:
         break;
     }
 
     size_t i = 0u;
+    /* procura a magica: o que vem antes dela (um RECEBER atrasado, lixo) e ignorado */
+    while (r->estado == RECEPCAO_ESPERANDO && i < n) {
+        const uint8_t b = dados[i++];
+        if (b == (uint8_t)MAGICA[r->n_bytes]) {
+            r->cab[r->n_bytes++] = b;
+            if (r->n_bytes == 4u) {
+                r->estado = RECEPCAO_EM_ANDAMENTO;
+                r->inicio_ms = agora_ms;
+            }
+        } else {
+            /* o que tinha batido nao era a magica; o 'Q' pode comecar outra
+             * ("QSEG" nao se sobrepoe a si mesma, entao basta olhar este byte) */
+            r->n_ignorados += r->n_bytes;
+            if (b == (uint8_t)MAGICA[0]) {
+                r->cab[0] = b;
+                r->n_bytes = 1u;
+            } else {
+                r->n_bytes = 0u;
+                ++r->n_ignorados;
+            }
+        }
+    }
+    if (r->estado == RECEPCAO_ESPERANDO) {
+        return r->estado;
+    }
     /* cabecalho */
     if (r->n_bytes < RECEPCAO_TAM_CABECALHO) {
         while (i < n && r->n_bytes < RECEPCAO_TAM_CABECALHO) {
@@ -148,23 +169,33 @@ recepcao_estado_t recepcao_receber(recepcao_t *r, const uint8_t *dados, size_t n
         }
     }
 
-    /* corpo */
+    /* corpo: cada byte e lido UMA vez de `dados`, para uma copia local, e o CRC e as
+     * amostras saem da copia. Na placa, `dados` e o anel do DMA, que continua sendo
+     * escrito: lendo duas vezes (uma para o CRC, outra para as amostras), um anel
+     * sobrescrito entre as duas leituras daria CRC certo com amostras erradas.
+     * Assim, o que o CRC confere e exatamente o que vai para a cadeia. */
     if (i < n && r->n_bytes >= RECEPCAO_TAM_CABECALHO) {
         const size_t falta = RECEPCAO_TAM_QUADRO - r->n_bytes;
-        const size_t m = n - i < falta ? n - i : falta;
-        r->crc = crc32_bytes(r->crc, &dados[i], m);
-        for (size_t k = 0; k < m; ++k) {
-            const uint32_t pos = r->n_bytes - RECEPCAO_TAM_CABECALHO + (uint32_t)k;
-            if ((pos & 1u) == 0u) {
-                r->byte_baixo = dados[i + k];   /* little-endian: o byte baixo primeiro */
-            } else {
-                const uint16_t u = (uint16_t)(r->byte_baixo | ((uint16_t)dados[i + k] << 8));
-                ++r->n_amostras;
-                amostra(r, (int16_t)u);
+        size_t m = n - i < falta ? n - i : falta;
+        while (m > 0u) {
+            uint8_t copia[64];
+            const size_t b = m < sizeof copia ? m : sizeof copia;
+            memcpy(copia, &dados[i], b);
+            r->crc = crc32_bytes(r->crc, copia, b);
+            for (size_t k = 0; k < b; ++k) {
+                const uint32_t pos = r->n_bytes - RECEPCAO_TAM_CABECALHO + (uint32_t)k;
+                if ((pos & 1u) == 0u) {
+                    r->byte_baixo = copia[k];   /* little-endian: o byte baixo primeiro */
+                } else {
+                    const uint16_t u = (uint16_t)(r->byte_baixo | ((uint16_t)copia[k] << 8));
+                    ++r->n_amostras;
+                    amostra(r, (int16_t)u);
+                }
             }
+            r->n_bytes += (uint32_t)b;
+            i += b;
+            m -= b;
         }
-        r->n_bytes += (uint32_t)m;
-        i += m;
         if (r->n_bytes == RECEPCAO_TAM_QUADRO) {
             if (r->crc != r->crc_lido) {
                 erro(r, RECEPCAO_E_CRC, agora_ms);

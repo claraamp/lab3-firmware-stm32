@@ -25,8 +25,15 @@
  * inteiro (tests/host/test_recepcao.c confere). A decisao so sai depois do CRC: um
  * quadro com CRC errado nunca vira $SEG.
  *
- * O cabecalho e conferido assim que os 18 bytes chegam: magica, versao, formato e
- * n_amostras errados viram erro na hora, sem esperar o corpo. A partir do erro, o
+ * Esperando um quadro, o parser procura a magica "QSEG" e ignora o que vier antes
+ * (contado em n_ignorados): um "RECEBER\n" atrasado do PC, que chega depois de a
+ * placa armar a recepcao, nao estraga o quadro que vem atras dele. Por isso o
+ * motivo "magica" nao aparece mais: um quadro com a magica corrompida e ignorado
+ * inteiro, a placa nao responde, e o PC reenvia pelo timeout dele.
+ *
+ * Depois da magica, o resto do cabecalho e conferido assim que os 18 bytes chegam:
+ * versao, formato e n_amostras errados viram erro na hora, sem esperar o corpo. A
+ * partir do erro, o
  * parser so conta os bytes descartados e espera a linha ficar RECEPCAO_SILENCIO_MS
  * sem bytes (recepcao_tempo devolve RECEPCAO_SILENCIO); so entao a placa manda o
  * $ERR e o $PED seguinte. Um quadro que para no meio por RECEPCAO_SILENCIO_MS e
@@ -58,7 +65,7 @@
 #define RECEPCAO_SILENCIO_MS 200u
 
 typedef enum {
-    RECEPCAO_ESPERANDO = 0, /* nenhum byte do quadro ainda */
+    RECEPCAO_ESPERANDO = 0, /* procurando a magica "QSEG" (sem timeout) */
     RECEPCAO_EM_ANDAMENTO,  /* chegou parte do quadro */
     RECEPCAO_COMPLETO,      /* quadro inteiro e CRC certo: caracteristicas prontas */
     RECEPCAO_ERRO,          /* erro: descartando ate a linha ficar em silencio */
@@ -68,7 +75,7 @@ typedef enum {
 /* Motivo do erro: o texto e o do campo motivo do $ERR (recepcao_motivo_texto). */
 typedef enum {
     RECEPCAO_OK = 0,
-    RECEPCAO_E_MAGICA,
+    RECEPCAO_E_MAGICA,      /* nao e mais emitido (30/10): a magica e procurada */
     RECEPCAO_E_VERSAO,
     RECEPCAO_E_FORMATO,
     RECEPCAO_E_TAMANHO,
@@ -89,11 +96,13 @@ typedef struct {
     uint32_t crc_lido;
     uint32_t crc;           /* CRC acumulado dos bytes 4..13 e do corpo */
     /* contagens */
-    uint32_t n_bytes;       /* bytes do quadro recebidos (ate RECEPCAO_TAM_QUADRO) */
+    uint32_t n_bytes;       /* bytes do quadro recebidos (ate RECEPCAO_TAM_QUADRO), a
+                             * contar da magica; esperando, quantos bytes dela ja bateram */
+    uint32_t n_ignorados;   /* bytes antes da magica */
     uint32_t n_descartados; /* bytes depois de um erro */
     uint32_t n_a_mais;      /* bytes que chegaram junto depois do quadro completo */
     uint32_t ultimo_ms;     /* quando chegou o ultimo byte */
-    uint32_t inicio_ms;     /* quando chegou o primeiro byte do quadro */
+    uint32_t inicio_ms;     /* quando a magica completou */
     uint32_t fim_ms;        /* quando o quadro completou (ou deu erro) */
     /* o corpo, amostra a amostra */
     uint8_t byte_baixo;     /* primeiro byte de uma amostra, esperando o segundo */
@@ -112,7 +121,7 @@ typedef struct {
 void recepcao_iniciar(recepcao_t *r, recepcao_ciclos_fn ler_ciclos, uint32_t agora_ms);
 
 /* Entrega `n` bytes que chegaram (n pode ser 0). Devolve o estado depois deles.
- * Em RECEPCAO_COMPLETO, bytes a mais so sao contados (n_a_mais); em
+ * Em RECEPCAO_ESPERANDO, o que vem antes da magica e ignorado; em RECEPCAO_COMPLETO, bytes a mais so sao contados (n_a_mais); em
  * RECEPCAO_ERRO, sao descartados e adiam o silencio. */
 recepcao_estado_t recepcao_receber(recepcao_t *r, const uint8_t *dados, size_t n,
                                    uint32_t agora_ms);
@@ -127,7 +136,7 @@ recepcao_estado_t recepcao_tempo(recepcao_t *r, uint32_t agora_ms);
  * mfcc (r->st). Os ciclos do resumo entram em r->ciclos. */
 int recepcao_caracteristicas(recepcao_t *r, float caracteristicas[2 * MFCC_N_COEFS]);
 
-/* "magica", "versao", "formato", "tamanho", "crc", "truncado" (ou "" para OK). */
+/* "magica" (nao emitido), "versao", "formato", "tamanho", "crc", "truncado" (ou "" para OK). */
 const char *recepcao_motivo_texto(recepcao_motivo_t m);
 
 #endif /* RECEPCAO_H */
