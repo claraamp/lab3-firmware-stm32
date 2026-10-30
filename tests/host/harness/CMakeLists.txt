@@ -154,8 +154,19 @@ add_executable(test_crc32
     ${RAIZ}/tests/host/test_crc32.c
     ${RAIZ}/Core/Src/crc32.c
 )
+
+# Recepcao de segmentos pela serial (Core/Src/recepcao.c): o parser do quadro em
+# fluxo, com os 10 segmentos dos clipes bit a bit contra o mfcc_segmento(), e os
+# erros (crc, cabecalho, truncado, silencio).
+add_executable(test_recepcao
+    ${RAIZ}/tests/host/test_recepcao.c
+    ${RAIZ}/Core/Src/recepcao.c
+    ${RAIZ}/Core/Src/crc32.c
+    ${RAIZ}/Core/Src/mfcc_estagios.c
+    ${RAIZ}/Core/Src/clipes_demo.c
+)
 foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa
-        test_cadeia_clipes test_decimacao decimar_gravacao test_crc32)
+        test_cadeia_clipes test_decimacao decimar_gravacao test_crc32 test_recepcao)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
