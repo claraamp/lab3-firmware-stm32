@@ -21,8 +21,8 @@
  *   b13 resumo janela=<min>/<med>/<max> espectro=... mel=... quadro=... segmento_med=<ciclos> us=<us>
  *   b13 FIM
  *
- * O CRC-32 e o do zlib (polinomio 0xEDB88320) sobre os bytes do bloco (ou, no
- * entrada_crc32, sobre os 25.600 B da entrada int16).
+ * O CRC-32 e o do zlib (polinomio 0xEDB88320, crc32.h) sobre os bytes do bloco
+ * (ou, no entrada_crc32, sobre os 25.600 B da entrada int16).
  *
  * A medicao de ciclos e uma passada separada, sem a serial: cada bloco de cada
  * quadro e medido sozinho, e o segmento inteiro (98 quadros, os tres blocos) e
@@ -42,9 +42,6 @@
 
 typedef void (*b13_enviar_fn)(const void *dados, size_t n);
 typedef uint32_t (*b13_ciclos_fn)(void);
-
-/* CRC-32 do zlib, incremental: comece com crc = 0. */
-uint32_t b13_crc32(uint32_t crc, const void *dados, size_t n);
 
 /* Roda os 5 segmentos (primeiro de cada clipe) e manda tudo por `enviar`. `ciclos`
  * le o contador (DWT->CYCCNT na placa); `clock_hz` so entra no texto.

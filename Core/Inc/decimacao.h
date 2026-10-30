@@ -180,10 +180,9 @@ void decimacao_conferir(const int16_t *ref, decimacao_observar_fn extra, void *c
 int decimacao_avaliar(const decimacao_medida_t *m, decimacao_comparacao_t *c);
 
 /* CRC-32 (zlib) das amostras int16 em little-endian, como o Python calcula com
- * zlib.crc32(np.asarray(x, '<i2').tobytes()). O _acumular continua um CRC
- * (comece com 0) com uma amostra. */
+ * zlib.crc32(np.asarray(x, '<i2').tobytes()). Amostra a amostra, o crc32_int16()
+ * do crc32.h. */
 uint32_t decimacao_crc32(const int16_t *x, size_t n);
-uint32_t decimacao_crc32_acumular(uint32_t crc, int16_t v);
 
 /* A verificacao inteira, com a saida por `enviar`. Devolve 1 se tudo passou.
  * Guarda o custo de ler o contador e o resultado da passada medida (CRC e escore)

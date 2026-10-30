@@ -104,9 +104,12 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              (conferência no boot, ciclos por bloco e o laço dos LEDs);
                              decimacao.c/.h, a decimação embarcada do recorte de 51,2 kHz;
                              pacote_serial.c/.h, o formato do pacote da serial;
+                             crc32.c/.h, o CRC-32 do zlib, comum ao blocos13, à
+                             decimação e à recepção pela serial;
                              texto_fixo.c/.h, float em texto sem o %f)
-tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL e
-                             testes das tabelas (test_mel_bordas.c, test_log_dct.c)
+tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL,
+                             testes das tabelas (test_mel_bordas.c, test_log_dct.c) e do
+                             CRC-32 comum (test_crc32.c)
 tests/host/pacote/           leitor dos pacotes da serial (referência para o painel)
 tests/host/harness/          harness no PC: confere o porte estágio a estágio contra o Python
 tests/host/blocos13/         emulador e receptor do teste dos blocos 1 a 3
@@ -254,6 +257,7 @@ Todos os estágios estão portados: a escala, a janela, o espectro (FFT real de 
 ```bash
 ./build/harness/test_mel_bordas     # MEL BORDAS OK (22 bordas, 479 pesos)
 ./build/harness/test_log_dct        # LOG DCT OK (matriz da DCT, épsilon somado, ddof = 0)
+./build/harness/test_crc32          # TEST CRC32 OK (o CRC-32 comum contra o zlib)
 ```
 
 O `test_log_dct` confere o que as referências não exercitam: a matriz da DCT contra a fórmula em float64 (a menos de 10⁻⁷) e com linhas ortonormais, o épsilon do log somado (com `mel = 1e-10`, a soma dá `ln(2e-10)` e o piso daria `ln(1e-10)`) e o desvio populacional num caso conhecido.

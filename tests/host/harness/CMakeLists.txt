@@ -87,6 +87,7 @@ add_executable(emular_blocos13
     ${RAIZ}/Core/Src/blocos13.c
     ${RAIZ}/Core/Src/mfcc_estagios.c
     ${RAIZ}/Core/Src/clipes_demo.c
+    ${RAIZ}/Core/Src/crc32.c
 )
 target_compile_definitions(emular_blocos13 PRIVATE BLOCOS13_HOST)
 
@@ -129,6 +130,7 @@ add_executable(test_decimacao
     ${RAIZ}/Core/Src/clipes_demo.c
     ${RAIZ}/Core/Src/pacote_serial.c
     ${RAIZ}/Core/Src/texto_fixo.c
+    ${RAIZ}/Core/Src/crc32.c
 )
 target_compile_definitions(test_decimacao PRIVATE DECIMACAO_HOST CADEIA_HOST)
 
@@ -142,10 +144,18 @@ add_executable(decimar_gravacao
     ${RAIZ}/Core/Src/clipes_demo.c
     ${RAIZ}/Core/Src/pacote_serial.c
     ${RAIZ}/Core/Src/texto_fixo.c
+    ${RAIZ}/Core/Src/crc32.c
 )
 target_compile_definitions(decimar_gravacao PRIVATE DECIMACAO_HOST CADEIA_HOST)
+
+# CRC-32 comum (Core/Src/crc32.c): o vetor 123456789, o CRC continuado e o das
+# amostras int16 em little-endian, contra valores do zlib do Python.
+add_executable(test_crc32
+    ${RAIZ}/tests/host/test_crc32.c
+    ${RAIZ}/Core/Src/crc32.c
+)
 foreach(alvo test_mel_bordas test_log_dct emular_blocos13 exportar_saidas_c emular_validacao_placa
-        test_cadeia_clipes test_decimacao decimar_gravacao)
+        test_cadeia_clipes test_decimacao decimar_gravacao test_crc32)
     target_include_directories(${alvo} PRIVATE ${RAIZ}/Core/Inc)
     target_link_libraries(${alvo} PRIVATE cmsisdsp_host)
     if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")

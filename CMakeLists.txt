@@ -99,12 +99,14 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # decimacao embarcada (bloco 0, 20/10): o recorte de 51,2 kHz pelo
     # arm_fir_decimate_f32 e pela cadeia no boot, com os ciclos pelo DWT
     Core/Src/decimacao.c
+    # CRC-32 do zlib, comum ao blocos13, a decimacao e a recepcao pela serial
+    Core/Src/crc32.c
 )
 # Marco de 13/10 (LDA na placa), estagios do MFCC, a cadeia completa e a decimacao:
 # sempre otimizados, inclusive no Debug, para o tempo medido pelo DWT ser o do
 # firmware final, como o CMSIS-DSP
 set_source_files_properties(Core/Src/marco_lda.c Core/Src/mfcc_estagios.c Core/Src/cadeia_clipes.c
-    Core/Src/decimacao.c
+    Core/Src/decimacao.c Core/Src/crc32.c
     PROPERTIES COMPILE_OPTIONS "-O2")
 
 # Teste dos blocos 1 a 3 na placa (janela, espectro e Mel; Core/Src/blocos13.c):

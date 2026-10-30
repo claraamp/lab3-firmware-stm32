@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "clipes_demo.h"
+#include "crc32.h"
 #include "mfcc_estagios.h"
 
 enum { B_JANELA, B_ESPECTRO, B_MEL, B_QUADRO, N_MEDIDAS };
@@ -49,25 +50,6 @@ static void nome_segmento(int s, char *buf, size_t tam)
 
 /* Impede o compilador de mover a conta para fora da janela do contador. */
 #define BARREIRA() __asm__ volatile("" ::: "memory")
-
-/* ------------------------------------------------------------------------- */
-/* CRC-32 (zlib), por tabela de 16 entradas: 64 B de flash                    */
-/* ------------------------------------------------------------------------- */
-uint32_t b13_crc32(uint32_t crc, const void *dados, size_t n)
-{
-    static const uint32_t t[16] = {
-        0x00000000u, 0x1DB71064u, 0x3B6E20C8u, 0x26D930ACu, 0x76DC4190u, 0x6B6B51F4u,
-        0x4DB26158u, 0x5005713Cu, 0xEDB88320u, 0xF00F9344u, 0xD6D6A3E8u, 0xCB61B38Cu,
-        0x9B64C2B0u, 0x86D3D2D4u, 0xA00AE278u, 0xBDBDF21Cu};
-    const uint8_t *p = (const uint8_t *)dados;
-    crc = ~crc;
-    for (size_t i = 0; i < n; ++i) {
-        crc ^= p[i];
-        crc = (crc >> 4) ^ t[crc & 0x0Fu];
-        crc = (crc >> 4) ^ t[crc & 0x0Fu];
-    }
-    return ~crc;
-}
 
 /* ------------------------------------------------------------------------- */
 /* Texto                                                                      */
@@ -231,7 +213,7 @@ static void exportar(int s, int e, const char *nome)
             saida = mel;
         }
         /* o Cortex-M4 e little-endian, como o receptor espera */
-        crc = b13_crc32(crc, saida, por_quadro);
+        crc = crc32_bytes(crc, saida, por_quadro);
         enviar(saida, por_quadro);
     }
     snprintf(linha, sizeof linha, "\r\nb13 fim nome=%s estagio=%s crc32=%08lx\r\n", nome,
@@ -264,7 +246,7 @@ int blocos13_rodar(b13_enviar_fn f_enviar, b13_ciclos_fn f_ciclos, uint32_t cloc
         /* CRC-32 das 12.800 amostras int16 (25.600 B), para o receptor conferir que a
          * entrada e a mesma da referencia */
         const uint32_t crc_entrada =
-            b13_crc32(0, entrada(s), sizeof(int16_t) * (size_t)CLIPES_AMOSTRAS_POR_SEGMENTO);
+            crc32_bytes(0, entrada(s), sizeof(int16_t) * (size_t)CLIPES_AMOSTRAS_POR_SEGMENTO);
         snprintf(linha, sizeof linha, "b13 seg i=%d nome=%s entrada_crc32=%08lx\r\n", s, nome,
                  (unsigned long)crc_entrada);
         enviar_texto(linha);
