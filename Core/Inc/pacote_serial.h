@@ -32,6 +32,16 @@
  * segmento (0, 0), o mesmo segundo de audio por dois caminhos: a chave de um
  * segmento e origem + clipe + segmento, e repeticao se ve pelo n.
  *
+ * A origem S (30/10, decisao de 29/10) entrou do mesmo jeito: segmento mandado pelo
+ * PC no modo de recepcao, com clipe = grupo e segmento = id do quadro. O modo traz
+ * duas linhas novas, $PED (a placa pede o proximo quadro) e $ERR (o quadro chegou
+ * errado; nao e resultado de segmento e nao gasta o n). Um leitor da v1 que so le
+ * $CAB e $SEG ignora as duas, entao a versao continua 1:
+ *
+ *   $PED,1,1*51
+ *   $ERR,1,2,118,crc*0C
+ *   $ERR,1,,,truncado*60     (antes de o cabecalho chegar: grupo e id vazios)
+ *
  * Nao usa a HAL: compila no PC (tests/host/test_pacote_serial.c) e na placa.
  */
 
@@ -54,6 +64,8 @@ typedef enum {
     PACOTE_ORIGEM_DECIMADO = 'D',   /* recorte de 51,2 kHz da flash, decimado na placa
                                      * (decimacao.h): do int16 a 51,2 kHz ao escore */
     PACOTE_ORIGEM_AO_VIVO = 'A',    /* microfone; reservado, ainda nao existe */
+    PACOTE_ORIGEM_SERIAL = 'S',     /* segmento mandado pelo PC (recepcao.h): clipe = grupo
+                                     * e segmento = id do quadro */
 } pacote_origem_t;
 
 /* Qual detector disparou: mascara de bits (0 = nenhum, 3 = ambos).
@@ -84,8 +96,9 @@ typedef enum {
 typedef struct {
     uint32_t n;             /* contador desde o boot; o painel ve pacotes perdidos */
     char origem;            /* pacote_origem_t */
-    int32_t clipe;          /* R: gravacao; C e D: clipe; A: -1 (sai vazio) */
-    int32_t segmento;       /* R: id do segmento no conjunto; C e D: segmento no clipe */
+    int32_t clipe;          /* R: gravacao; C e D: clipe; S: grupo; A: -1 (sai vazio) */
+    int32_t segmento;       /* R: id do segmento no conjunto; C e D: segmento no clipe;
+                             * S: id do quadro */
     uint8_t falha;          /* decisao: 1 = falha, 0 = normal */
     uint8_t disparou;       /* mascara PACOTE_DISPAROU_* */
     float escore_lda;       /* cru, nunca em %; falha se >= 0 */
@@ -123,5 +136,16 @@ int pacote_linha(char *buf, size_t n, const pacote_segmento_t *p);
  * antes de mostrar os segmentos. Devolve o tamanho, ou -1. */
 int pacote_cabecalho(char *buf, size_t n, const char *modelo_id, const char *json_sha12,
                      unsigned n_features, unsigned clock_mhz);
+
+/* Linha $PED do modo de recepcao: a placa esta pronta para o proximo quadro.
+ * `pedido` conta os pedidos desde a entrada no modo (1, 2, ...). Devolve o
+ * tamanho, ou -1. */
+int pacote_pedido(char *buf, size_t n, uint32_t pedido);
+
+/* Linha $ERR do modo de recepcao: o quadro chegou errado. Com `tem_id`, grupo e id
+ * do cabecalho recebido; sem ele, os dois saem vazios. `motivo` e o texto do
+ * recepcao_motivo_texto() (sem virgula nem '*'). Devolve o tamanho, ou -1. */
+int pacote_erro_recepcao(char *buf, size_t n, int tem_id, uint16_t grupo, uint32_t id,
+                         const char *motivo);
 
 #endif /* PACOTE_SERIAL_H */

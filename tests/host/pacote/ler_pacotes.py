@@ -11,7 +11,10 @@ Este script e a referencia de leitura para o painel de novembro:
    que um byte de float pode valer '$'). Se vir as linhas "b13 ..." desse teste,
    avisa que o firmware foi gravado com -DBLOCOS13=ON;
 3. confere em cada $CAB e $SEG: checksum, versao, numero e tipo dos campos
-   (origens R, C, D e A; a D, de 22/10, e o recorte de 51,2 kHz decimado na placa);
+   (origens R, C, D, S e A; a D, de 22/10, e o recorte de 51,2 kHz decimado na
+   placa; a S, de 30/10, e o segmento mandado pelo PC no modo de recepcao, com
+   clipe = grupo e segmento = id do quadro). As linhas $PED e $ERR desse modo
+   nao sao segmentos e ficam de fora, como o resto;
 4. confere a coerencia da decisao com os sentidos da decisao de 17/10
    (LDA: falha se escore >= 0; novidade: falha se pontuacao > limiar). Na LDA, o
    sinal do texto e sempre o da decisao: todo escore negativo sai com '-',
@@ -53,7 +56,7 @@ CAMPOS_SEG = ("versao", "n", "origem", "clipe", "segmento", "decisao", "disparou
               "escore_lda", "cod_novidade", "pont_novidade", "lim_novidade", "ciclos")
 CAMPOS_CAB = ("versao", "modelo", "json_sha12", "n_features", "clock_mhz")
 
-ORIGENS = {"R": "referencia", "C": "clipe", "D": "decimado", "A": "ao vivo"}
+ORIGENS = {"R": "referencia", "C": "clipe", "D": "decimado", "S": "serial", "A": "ao vivo"}
 NOVIDADE = {0: "nao adotado", 1: "pente BPFO (dB)", 2: "pente BPFI (dB)",
             3: "Mahalanobis2 MFCC", 4: "Mahalanobis2 MFCC+pente"}
 DISPAROU_LDA, DISPAROU_NOVIDADE, ERRO = 1, 2, 4
@@ -304,6 +307,7 @@ def autoteste():
         "$SEG,1,7,C,0,1,F,2,-1400.000,3,812.250,61.500,412*6D",
         "$SEG,1,7,A,,0,F,1,10.000,2,3.000,4.000,412*4C",
         "$SEG,1,0,D,0,0,N,0,-1331.770,0,,,17453346*6C",
+        "$SEG,1,812,S,2,117,N,0,-1.234,0,,,1043210*71",
     ]
 
     def assinar(corpo):

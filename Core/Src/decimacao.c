@@ -12,6 +12,7 @@
 #include <string.h>
 
 #include "arm_math.h"
+#include "crc32.h"
 #include "lda_modelo.h"
 #include "mfcc_estagios.h"
 #include "texto_fixo.h"
@@ -148,30 +149,12 @@ int decimacao_fase(void)
 /* ------------------------------------------------------------------------- */
 /* CRC-32                                                                     */
 /* ------------------------------------------------------------------------- */
-/* CRC-32 (zlib), por tabela de 16 entradas, como o do blocos13.c */
-static const uint32_t CRC_T[16] = {
-    0x00000000u, 0x1DB71064u, 0x3B6E20C8u, 0x26D930ACu, 0x76DC4190u, 0x6B6B51F4u,
-    0x4DB26158u, 0x5005713Cu, 0xEDB88320u, 0xF00F9344u, 0xD6D6A3E8u, 0xCB61B38Cu,
-    0x9B64C2B0u, 0x86D3D2D4u, 0xA00AE278u, 0xBDBDF21Cu};
-
-uint32_t decimacao_crc32_acumular(uint32_t crc, int16_t v)
-{
-    const uint16_t u = (uint16_t)v;
-    const uint8_t bytes[2] = {(uint8_t)(u & 0xFFu), (uint8_t)(u >> 8)};   /* little-endian */
-    crc = ~crc;
-    for (int b = 0; b < 2; ++b) {
-        crc ^= bytes[b];
-        crc = (crc >> 4) ^ CRC_T[crc & 0x0Fu];
-        crc = (crc >> 4) ^ CRC_T[crc & 0x0Fu];
-    }
-    return ~crc;
-}
-
+/* O CRC-32 do zlib e o do crc32.h; aqui, so o de um vetor de amostras */
 uint32_t decimacao_crc32(const int16_t *x, size_t n)
 {
     uint32_t crc = 0u;
     for (size_t i = 0; i < n; ++i) {
-        crc = decimacao_crc32_acumular(crc, x[i]);
+        crc = crc32_int16(crc, x[i]);
     }
     return crc;
 }
@@ -232,7 +215,7 @@ int decimacao_executar(decimacao_observar_fn obs, void *ctx, cadeia_ciclos_fn ci
             }
             const float y = decimador_y[i];
             const int16_t q = decimacao_quantizar(y, &sat);
-            crc = decimacao_crc32_acumular(crc, q);
+            crc = crc32_int16(crc, q);
             if (obs) {
                 obs(ctx, j, y);
             }
@@ -310,7 +293,7 @@ void decimacao_conferir(const int16_t *ref, decimacao_observar_fn extra, void *c
                 c->dif_int16_max = d;
             }
             c->n_dif += (d != 0);
-            crc = decimacao_crc32_acumular(crc, q);
+            crc = crc32_int16(crc, q);
             if (extra) {
                 extra(ctx, j, y);
             }

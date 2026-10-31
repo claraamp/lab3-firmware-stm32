@@ -4,8 +4,8 @@ orcamento_memoria.py -- flash e RAM do firmware por parte, lidas do .map do link
 
 Le o frente1.map que o arm-none-eabi-ld grava em todo build (-Wl,-Map) e soma o
 tamanho de cada secao de entrada pela parte do firmware a que ela pertence:
-clipes, recorte de 51,2 kHz, cadeia (MFCC), decimacao (bloco 0), marco e LDA, pacote da
-serial, CMSIS-DSP, HAL, biblioteca C e o resto. Mostra tambem a reserva de heap
+clipes, recorte de 51,2 kHz, cadeia (MFCC), decimacao (bloco 0), recepcao pela serial,
+CRC-32, marco e LDA, pacote da serial, CMSIS-DSP, HAL, biblioteca C e o resto. Mostra tambem a reserva de heap
 e pilha do linker script, a RAM livre e a projecao com o detector de novidade.
 
 Desde 20/10 o build padrao ja tem tudo (cadeia, clipes, recorte e decimacao); o
@@ -43,6 +43,7 @@ ORDEM = ["clipes a 12,8 kHz", "recorte a 51,2 kHz", "cadeia (MFCC)",
          "cadeia completa na placa (cadeia_clipes.c)",
          "decimacao (decimacao.c; a FIR esta na CMSIS-DSP)",
          "build de medida (orcamento.c; nao vai para o firmware final)",
+         "recepcao pela serial (recepcao.c e recepcao_serial.c)", "CRC-32 comum (crc32.c)",
          "marco e LDA", "pacote da serial", "teste dos blocos 1 a 3", "CMSIS-DSP",
          "HAL e CubeMX", "aplicacao base", "biblioteca C", "alinhamento", "outros"]
 
@@ -60,6 +61,12 @@ def parte(arquivo: str, secao: str) -> str:
         # arm_fir_decimate_f32 e o init dela vem da libCMSISDSP.a e caem na linha
         # da CMSIS-DSP
         return "decimacao (decimacao.c; a FIR esta na CMSIS-DSP)"
+    if "recepcao.c" in a or "recepcao_serial.c" in a:
+        # o parser e o modo de recepcao (31/10): o anel do DMA (2 KB), o estado do
+        # parser e os buffers de linha
+        return "recepcao pela serial (recepcao.c e recepcao_serial.c)"
+    if "crc32.c" in a:
+        return "CRC-32 comum (crc32.c)"
     if "orcamento.c" in a:
         return "build de medida (orcamento.c; nao vai para o firmware final)"
     if "marco_lda.c" in a:
@@ -72,7 +79,7 @@ def parte(arquivo: str, secao: str) -> str:
         return "CMSIS-DSP"
     if "STM32_Drivers" in a or "stm32f4xx_hal" in a or "system_stm32f4xx" in a:
         return "HAL e CubeMX"
-    if re.search(r"/(main|usart|gpio|stm32f4xx_it|syscalls|sysmem)\.c|startup_", a):
+    if re.search(r"/(main|usart|gpio|dma|stm32f4xx_it|syscalls|sysmem)\.c|startup_", a):
         return "aplicacao base"
     if re.search(r"lib(c|m|g|gcc|nosys|c_nano|g_nano|m_nano)\.a|crt[0-9in]|/libgcc", a):
         return "biblioteca C"

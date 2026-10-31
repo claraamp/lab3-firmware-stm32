@@ -1,0 +1,85 @@
+cadeia seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=5855394 blocos=janela:976026,espectro:3944201,mel:362067,log:296340,dct:196711,resumo:49203,final:642,lda:244 soma=5825434 iguais=1
+cadeia seg=30 clipe=normal k=1 ref=-1392.133 placa=-1392.132 dif=0.000244 tol=0.013921 dec=normal OK ciclos=5855300 blocos=janela:976006,espectro:3944210,mel:362062,log:296318,dct:196710,resumo:49098,final:642,lda:244 soma=5825290 iguais=1
+cadeia seg=88 clipe=bpfi_0.3mm k=0 ref=1361.836 placa=1361.836 dif=0.000366 tol=0.013618 dec=falha OK ciclos=5855751 blocos=janela:976006,espectro:3944198,mel:362063,log:296842,dct:196713,resumo:49098,final:642,lda:244 soma=5825806 iguais=1
+cadeia seg=89 clipe=bpfi_0.3mm k=1 ref=1477.391 placa=1477.391 dif=0.000122 tol=0.014774 dec=falha OK ciclos=5856392 blocos=janela:976021,espectro:3944195,mel:362063,log:297389,dct:196710,resumo:49098,final:642,lda:244 soma=5826362 iguais=1
+cadeia seg=147 clipe=bpfi_1.0mm k=0 ref=1469.799 placa=1469.799 dif=0.000122 tol=0.014698 dec=falha OK ciclos=5857430 blocos=janela:976005,espectro:3944215,mel:362063,log:298498,dct:196713,resumo:49098,final:642,lda:244 soma=5827478 iguais=1
+cadeia seg=148 clipe=bpfi_1.0mm k=1 ref=1425.165 placa=1425.165 dif=0.000854 tol=0.014252 dec=falha OK ciclos=5857202 blocos=janela:976147,espectro:3944199,mel:362064,log:298126,dct:196715,resumo:49098,final:642,lda:244 soma=5827235 iguais=1
+cadeia seg=206 clipe=bpfo_0.3mm k=0 ref=1492.375 placa=1492.374 dif=0.000122 tol=0.014924 dec=falha OK ciclos=5854510 blocos=janela:976082,espectro:3944208,mel:362064,log:295499,dct:196711,resumo:49098,final:642,lda:244 soma=5824548 iguais=1
+cadeia seg=207 clipe=bpfo_0.3mm k=1 ref=1518.178 placa=1518.177 dif=0.000366 tol=0.015182 dec=falha OK ciclos=5854342 blocos=janela:976052,espectro:3944180,mel:362065,log:295322,dct:196713,resumo:49098,final:642,lda:244 soma=5824316 iguais=1
+cadeia seg=265 clipe=bpfo_1.0mm k=0 ref=1499.839 placa=1499.839 dif=0.000000 tol=0.014998 dec=falha OK ciclos=5855416 blocos=janela:976130,espectro:3944206,mel:361995,log:296343,dct:196711,resumo:49160,final:642,lda:244 soma=5825431 iguais=1
+cadeia seg=266 clipe=bpfo_1.0mm k=1 ref=1499.847 placa=1499.847 dif=0.000000 tol=0.014998 dec=falha OK ciclos=5855321 blocos=janela:976206,espectro:3944132,mel:362002,log:296241,dct:196708,resumo:49098,final:642,lda:244 soma=5825273 iguais=1
+cadeia resumo ok=10/10 decisoes_iguais=10/10 iguais_blocos=10/10 dif_max=0.000854 (seg 148) dif/tol_max=6.0% ciclos min=5854342 med=5855394 max=5857430 (med 58.55 ms, max 58.57 ms)
+cadeia blocos_mediana janela=976026 espectro=3944199 mel=362063 log=296340 dct=196711 resumo=49098 final=642 lda=244 soma=5825323 (58.25 ms)
+CADEIA OK
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+decim inicio recorte=seg29 clipe=normal fs=51200->12800 taps=147 fator=4 bloco=512 amostras=51348 descartar=37
+decim fase=0 OK
+decim saida n=12800/12837 saturadas=0 quadros=98 max_lsb=0.500092 (j=6240) tol=0.555330 pico=5533 dif_int16_max=1 n_dif=7 iguais=1 crc32=E4DD7E31 crc32_ref=D10BB565 OK
+decim ciclos total=17459670 (174.60 ms, 17.5% do tempo real) decimacao=11615934 (116.16 ms, 11.6%) fir=10210754 (102.11 ms) resto=1405180 (14.05 ms) cadeia=5843736 (58.44 ms)
+decim escore ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal igual_clipe=0 OK
+DECIMACAO OK duracao=306.98 ms
+ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.001099 tol=0.013318 dec=normal OK ciclos=17459700 (174.60 ms, 17.5% do tempo real) decimacao=11615878 cadeia=5843822 crc32=E4DD7E31 igual_boot=1
+$SEG,1,0,D,0,0,N,0,-1331.769,0,,,17459700*68
+demo seg=29 clipe=normal k=0 ref=-1331.768 placa=-1331.768 dif=0.000122 tol=0.013318 dec=normal OK ciclos=5855338
+$SEG,1,1,C,0,0,N,0,-1331.768,0,,,5855338*53
+recepcao inicio modelo=exp239 json=ee0c3e088366 quadro=25618 anel=2048 baud=921600 silencio_ms=200
+ref seg=29 clipe=normal k=0 escore=-1331.768 escore_hex=0xC4A67890
+ref seg=30 clipe=normal k=1 escore=-1392.132 escore_hex=0xC4AE043C
+ref seg=88 clipe=bpfi_0.3mm k=0 escore=1361.836 escore_hex=0x44AA3AC3
+ref seg=89 clipe=bpfi_0.3mm k=1 escore=1477.391 escore_hex=0x44B8AC81
+ref seg=147 clipe=bpfi_1.0mm k=0 escore=1469.799 escore_hex=0x44B7B990
+ref seg=148 clipe=bpfi_1.0mm k=1 escore=1425.165 escore_hex=0x44B22544
+ref seg=206 clipe=bpfo_0.3mm k=0 escore=1492.374 escore_hex=0x44BA8BFB
+ref seg=207 clipe=bpfo_0.3mm k=1 escore=1518.177 escore_hex=0x44BDC5AB
+ref seg=265 clipe=bpfo_1.0mm k=0 escore=1499.839 escore_hex=0x44BB7ADB
+ref seg=266 clipe=bpfo_1.0mm k=1 escore=1499.847 escore_hex=0x44BB7B1E
+$CAB,1,exp239,ee0c3e088366,26,100*3B
+$PED,1,1*51
+rx grupo=9 id=29 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=5844790 escore_hex=0xC4A67890
+$SEG,1,2,S,9,29,N,0,-1331.768,0,,,5844790*74
+$PED,1,2*52
+rx grupo=9 id=30 bytes=25618 ms=306 ignorados=0 a_mais=0 erros_uart=0 ciclos=5844708 escore_hex=0xC4AE043C
+$SEG,1,3,S,9,30,N,0,-1392.132,0,,,5844708*7C
+$PED,1,3*53
+rx grupo=9 id=88 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=5845126 escore_hex=0x44AA3AC3
+$SEG,1,4,S,9,88,F,1,1361.836,0,,,5845126*56
+$PED,1,4*54
+rx grupo=9 id=89 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=5845871 escore_hex=0x44B8AC81
+$SEG,1,5,S,9,89,F,1,1477.391,0,,,5845871*5B
+$PED,1,5*55
+rx grupo=9 id=147 bytes=25618 ms=306 ignorados=0 a_mais=0 erros_uart=0 ciclos=5846829 escore_hex=0x44B7B990
+$SEG,1,6,S,9,147,F,1,1469.799,0,,,5846829*66
+$PED,1,6*56
+rx grupo=9 id=148 bytes=25618 ms=306 ignorados=0 a_mais=0 erros_uart=0 ciclos=5846551 escore_hex=0x44B22544
+$SEG,1,7,S,9,148,F,1,1425.165,0,,,5846551*67
+$PED,1,7*57
+rx grupo=9 id=206 bytes=25618 ms=306 ignorados=0 a_mais=0 erros_uart=0 ciclos=5843948 escore_hex=0x44BA8BFB
+$SEG,1,8,S,9,206,F,1,1492.374,0,,,5843948*6E
+$PED,1,8*58
+rx grupo=9 id=207 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=5843678 escore_hex=0x44BDC5AB
+$SEG,1,9,S,9,207,F,1,1518.177,0,,,5843678*60
+$PED,1,9*59
+rx grupo=9 id=265 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=5844871 escore_hex=0x44BB7ADB
+$SEG,1,10,S,9,265,F,1,1499.839,0,,,5844871*57
+$PED,1,10*61
+rx grupo=9 id=266 bytes=25618 ms=306 ignorados=0 a_mais=0 erros_uart=0 ciclos=5844739 escore_hex=0x44BB7B1E
+$SEG,1,11,S,9,266,F,1,1499.847,0,,,5844739*5F
+$PED,1,11*60
+rx erro=crc grupo=9 id=88 bytes=25618 descartados=0 ignorados=0 erros_uart=0
+$ERR,1,9,88,crc*3F
+$PED,1,12*63
+rx erro=versao grupo=9 id=88 bytes=18 descartados=25600 ignorados=0 erros_uart=0
+$ERR,1,9,88,versao*51
+$PED,1,13*62
+rx erro=formato grupo=9 id=88 bytes=18 descartados=25600 ignorados=0 erros_uart=0
+$ERR,1,9,88,formato*21
+$PED,1,14*65
+rx erro=tamanho grupo=9 id=88 bytes=18 descartados=25600 ignorados=0 erros_uart=0
+$ERR,1,9,88,tamanho*3D
+$PED,1,15*64
+rx erro=truncado grupo=9 id=88 bytes=12809 descartados=0 ignorados=0 erros_uart=0
+$ERR,1,9,88,truncado*59
+$PED,1,16*67
+rx grupo=9 id=88 bytes=25618 ms=306 ignorados=25618 a_mais=0 erros_uart=0 ciclos=5845217 escore_hex=0x44AA3AC3
+$SEG,1,12,S,9,88,F,1,1361.836,0,,,5845217*60
+$PED,1,17*66

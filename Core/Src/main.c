@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "dma.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -28,6 +29,7 @@
 #include "marco_lda.h"
 #include "cadeia_clipes.h"
 #include "decimacao.h"
+#include "recepcao_serial.h"
 #ifdef FIRMWARE_BLOCOS13
 #include "blocos13.h"
 #endif
@@ -149,6 +151,7 @@ int main(void)
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
+  MX_DMA_Init();
   MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
   const char hello[] = "hello frente1\r\n";
@@ -202,6 +205,11 @@ int main(void)
    * recorte de 51,2 kHz, decimado e passado pela cadeia ate o escore ($SEG de
    * origem D), e segue pelos 10 segmentos dos clipes (origem C). */
   int nova_volta = 1;
+
+  /* Recepcao de segmentos pela serial (30/10): a UART fica escutando durante a
+   * demonstracao; um "RECEBER" do PC troca a demonstracao pelo modo de recepcao,
+   * de onde so se sai por reset. Ver recepcao_serial.h. */
+  recepcao_serial_escutar();
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -219,6 +227,12 @@ int main(void)
      * mostraria, e numa demonstracao ninguem esta olhando a serial. A mesma trava
      * vale para o caminho decimado (origem D), que o decimacao_passo() roda no
      * comeco de cada volta. */
+    /* O PC pediu o modo de recepcao: confere entre um segmento e outro (cada um
+     * leva ~2,3 s; o PC repete o RECEBER a cada 1 s). Com tudo_ok == 0, a placa
+     * recusa e a demonstracao continua piscando o erro. */
+    if (recepcao_serial_pedido()) {
+      recepcao_serial_executar(tudo_ok);
+    }
     if (nova_volta) {
       decimacao_passo(tudo_ok);
     }
