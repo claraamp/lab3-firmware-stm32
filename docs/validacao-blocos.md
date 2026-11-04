@@ -118,7 +118,7 @@ O teste leva menos de 1 s. Ele usa a CMSIS otimizada do Cortex-M4 e a FMA do com
 ```bash
 cmake --preset Debug -DVALIDACAO_PLACA=ON -DBLOCOS13=OFF   # o BLOCOS13 pode ter ficado ligado no cache
 cmake --build --preset Debug          # e gravar
-picocom -b 115200 /dev/ttyUSB0 --logfile build/validacao_placa.txt   # apertar o RESET, esperar "val FIM", sair com Ctrl-A Ctrl-X
+picocom -b 921600 /dev/ttyUSB0 --logfile build/validacao_placa.txt   # apertar o RESET, esperar "val FIM", sair com Ctrl-A Ctrl-X
 python3 tests/host/validacao/gerar_refs_clipes.py --out build/refs_clipes
 python3 tests/host/validacao/validar_blocos.py --refs build/refs_clipes \
     --placa build/validacao_placa.txt --md build/validacao_placa.md

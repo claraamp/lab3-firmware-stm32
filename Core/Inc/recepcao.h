@@ -126,6 +126,15 @@ void recepcao_iniciar(recepcao_t *r, recepcao_ciclos_fn ler_ciclos, uint32_t ago
 recepcao_estado_t recepcao_receber(recepcao_t *r, const uint8_t *dados, size_t n,
                                    uint32_t agora_ms);
 
+/* `n` bytes chegaram mas se perderam antes de chegar ao parser (na placa, o anel do
+ * DMA estourado: o DMA escreveu por cima antes de o laco ler). O quadro que estava
+ * chegando nao pode mais sair certo: esperando a magica ou no meio do quadro, vira
+ * erro "truncado" na hora, com os `n` em n_descartados, e o $ERR sai depois do
+ * silencio, como nos outros erros (sem grupo e id se a magica se perdeu: sem isso, a
+ * placa ficaria calada e o motivo nao apareceria). Em erro, so conta e adia o
+ * silencio; em RECEPCAO_COMPLETO, conta em n_a_mais. Devolve o estado. */
+recepcao_estado_t recepcao_perder(recepcao_t *r, size_t n, uint32_t agora_ms);
+
 /* Chamar periodicamente (no laco): no meio de um quadro, RECEPCAO_SILENCIO_MS sem
  * bytes viram erro "truncado"; em erro, o mesmo silencio vira RECEPCAO_SILENCIO.
  * Nos outros estados, nao muda nada. Devolve o estado. */

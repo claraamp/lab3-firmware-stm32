@@ -17,7 +17,7 @@ Ao ligar, a placa:
    ```
 
    O pico no bin 32 com magnitude 256,0 (= N/2) é o valor teórico esperado.
-2. só se o firmware foi compilado com `-DBLOCOS13=ON` (desligada por padrão), roda os **blocos 1 a 3** nos 5 segmentos de referência e manda a saída de cada bloco em binário, para o `receber_blocos13.py` (seção "Blocos 1 a 3 na placa"). Leva cerca de 100 s a 115200 baud, e o marco e os LEDs só começam depois;
+2. só se o firmware foi compilado com `-DBLOCOS13=ON` (desligada por padrão), roda os **blocos 1 a 3** nos 5 segmentos de referência e manda a saída de cada bloco em binário, para o `receber_blocos13.py` (seção "Blocos 1 a 3 na placa"). Levava cerca de 100 s a 115.200 baud (ainda não medido a 921.600, o padrão desde 03/11), e o marco e os LEDs só começam depois;
 3. **confere a LDA em todos os segmentos** do `lda_vetores_teste.h`: calcula o escore com o `lda_escore()` do `lda_modelo.h`, compara com o escore do `escores_referencia.csv` e manda uma linha por segmento, um resumo e `MARCO OK` ou `MARCO FALHOU`:
 
    ```
@@ -86,7 +86,7 @@ No PC o gcc não funde multiplicação e soma; no Cortex-M4 funde (`vfma.f32`). 
 | PA13 / PA14 | SWDIO / SWCLK | ST-Link |
 | PH0 / PH1 | cristal HSE | já ligado na placa |
 
-Serial: **115200 baud, 8N1**. TX e RX são cruzados entre a placa e o adaptador, e só o GND é comum: não ligue o 3V3 nem o 5V do adaptador na placa. Deixe o USB-C da Black Pill desconectado enquanto o ST-Link estiver alimentando a placa.
+Serial: **921.600 baud, 8N1** (padrão desde 03/11, decisão "Recepção pela serial a 921.600 bit/s como padrão, com contador de voltas do anel"; até então, 115.200). TX e RX são cruzados entre a placa e o adaptador, e só o GND é comum: não ligue o 3V3 nem o 5V do adaptador na placa. Deixe o USB-C da Black Pill desconectado enquanto o ST-Link estiver alimentando a placa.
 
 O diagrama de circuito está em [`hardware/frente1-circuito/`](hardware/frente1-circuito/) (projeto do KiCad, com o símbolo da Black Pill na biblioteca `frente1.kicad_sym` e o esquema exportado em SVG).
 
@@ -158,7 +158,7 @@ STM32_Programmer_CLI -c port=SWD -w build/Debug/frente1.elf -v -rst
 
 ```bash
 sudo usermod -aG dialout $USER     # uma vez só; depois saia e entre na sessão
-picocom -b 115200 /dev/ttyUSB0     # sair: Ctrl+A e depois Ctrl+X
+picocom -b 921600 /dev/ttyUSB0     # sair: Ctrl+A e depois Ctrl+X
 ```
 
 ## CMSIS-DSP
@@ -355,7 +355,7 @@ Formato **v1**, definido em 17/10 a partir da decisão "O que o painel mostra no
 
 **Texto, uma linha por segmento de 1 s, no estilo das sentenças NMEA:** começa com `$`, campos separados por vírgula, e termina com `*` mais o checksum e `\r\n`. O checksum é o XOR de todos os bytes entre o `$` e o `*`, em 2 dígitos hexadecimais maiúsculos. Texto porque se lê direto no picocom e basta para a demonstração e o 2º parcial; o checksum porque o painel precisa descartar a linha que chegar corrompida em vez de mostrar um número errado. As outras linhas da serial (`hello`, `fft512`, `marco13`, `seg ...`, `demo ...`) não começam com `$`, e o painel as ignora.
 
-A 115200 baud, um `$SEG` típico (~45 B) leva cerca de 4 ms, contra 1 s de áudio por segmento.
+A 921.600 baud, um `$SEG` típico (~45 B) leva cerca de 0,5 ms (4 ms a 115.200), contra 1 s de áudio por segmento.
 
 ### `$CAB`: cabeçalho, uma vez ao ligar
 
@@ -478,7 +478,7 @@ O teste confere os 10 segmentos, a passada bloco a bloco igual à do `mfcc_segme
 ```bash
 cmake --preset Debug -DBLOCOS13=OFF -DVALIDACAO_PLACA=OFF -DORCAMENTO=OFF   # limpa o que ficou no cache
 cmake --build --preset Debug          # e gravar
-picocom -b 115200 /dev/ttyUSB0 --logfile build/cadeia_placa.txt   # RESET; esperar uns 3 ciclos da demo
+picocom -b 921600 /dev/ttyUSB0 --logfile build/cadeia_placa.txt   # RESET; esperar uns 3 ciclos da demo
 python3 tests/host/pacote/ler_pacotes.py --arquivo build/cadeia_placa.txt --resumo
 ```
 
@@ -767,7 +767,7 @@ ponta seg=29 clipe=normal fs=51200->12800 ref=-1331.768 placa=-1331.769 dif=0.00
 
 Card "Recepção de segmentos pela serial no firmware (nova origem no $SEG)". A flash só guarda os 10 segmentos dos clipes, todos do treino. Com a placa recebendo segmentos do PC pelo adaptador USB-serial, a cadeia da placa roda nos 295 segmentos do Jung e nos 40 do HUSTmotor, que estão fora do treino. O formato abaixo foi decidido em 29/10 (Registro de Decisões, "Recepção de segmentos pela serial: formato do quadro, origem S e modo de recepção"), com a revisão da Amanda e da Júlia.
 
-**Estado (30/10):** o parser do quadro (`recepcao.c/.h`), o modo de recepção na placa (`recepcao_serial.c/.h`), a origem `S` e as linhas `$PED` e `$ERR` no `pacote_serial`, o script mínimo do PC (`tests/host/recepcao/enviar_segmento.py`) e um emulador da placa no PC estão prontos e testados no PC, e testados na placa em 30/10 (115.200 bit/s) e em 31/10 (921.600 bit/s, teste à parte; seção "Resultado na placa").
+**Estado (30/10):** o parser do quadro (`recepcao.c/.h`), o modo de recepção na placa (`recepcao_serial.c/.h`), a origem `S` e as linhas `$PED` e `$ERR` no `pacote_serial`, o script mínimo do PC (`tests/host/recepcao/enviar_segmento.py`) e um emulador da placa no PC estão prontos e testados no PC, e testados na placa em 30/10 (115.200 bit/s) e em 31/10 (921.600 bit/s, teste à parte; seção "Resultado na placa"). **04/11:** 921.600 bit/s passa a ser o padrão, com o contador de voltas do anel ("Voltas do anel", abaixo); testado no PC e na placa em 04/11 (seção "Resultado na placa").
 
 ### O diálogo
 
@@ -775,7 +775,7 @@ Card "Recepção de segmentos pela serial no firmware (nova origem no $SEG)". A 
 2. Para cada `$PED`, o PC manda **um** quadro. Para cada quadro, a placa responde com exatamente um `$SEG` (origem `S`) ou um `$ERR`, e depois um `$PED`. O PC não manda nada antes do `$PED`.
 3. Se vier `$ERR`, ou se nenhuma resposta chegar no tempo de transmissão mais 2 s, o PC reenvia o mesmo segmento. São no máximo 3 tentativas por segmento, contando as duas causas; depois, o segmento entra no relatório como "não processado", com contagem: a matriz dos 335 não pode encolher sem ninguém perceber. As regras completas do script da rodada estão em "Regras do PC na rodada", abaixo.
 
-A 115.200 bit/s (o padrão), um quadro leva 2,22 s e os 335 segmentos, cerca de 13 min. 921.600 bit/s (925.926 reais com o APB2 a 100 MHz: a HAL grava BRR = 0x6C, USARTDIV 6,75, +0,47 %) é uma opção, testada em 31/10 (seção "Resultado na placa"); o formato não depende do baud.
+A 921.600 bit/s (o padrão desde 03/11; 925.926 reais com o APB2 a 100 MHz: a HAL grava BRR = 0x6C, USARTDIV 6,75, +0,47 %), um quadro leva 277 ms teóricos (306 a 307 ms medidos em 31/10) e os 335 segmentos, cerca de 2 min. A 115.200 bit/s, o padrão até 03/11, eram 2,22 s por quadro e cerca de 13 min. O formato não depende do baud; os scripts aceitam `--baud 115200` para um firmware antigo.
 
 ### O quadro (PC → placa)
 
@@ -803,22 +803,24 @@ quadro = b"QSEG" + cab + struct.pack("<I", zlib.crc32(cab + corpo)) + corpo
 ### As respostas (placa → PC)
 
 ```
-recepcao inicio modelo=exp239 json=ee0c3e088366 quadro=25618 anel=2048 baud=115200 silencio_ms=200
+recepcao inicio modelo=exp239 json=ee0c3e088366 quadro=25618 anel=2048 baud=921600 silencio_ms=200
 ref seg=29 clipe=normal k=0 escore=-1331.768 escore_hex=0xC4A67892   (uma por segmento dos clipes)
 $CAB,1,exp239,ee0c3e088366,26,100*3B
 $PED,1,1*51                                    pronta; o 3º campo conta os pedidos desde a entrada no modo
-rx grupo=2 id=117 bytes=25618 ms=2231 ignorados=0 a_mais=0 erros_uart=0 ciclos=... escore_hex=0x...
+rx grupo=2 id=117 bytes=25618 ms=307 ignorados=0 a_mais=0 erros_uart=0 ciclos=... escore_hex=0x... voltas=12 estouros=0
 $SEG,1,812,S,2,117,N,0,-1.234,0,,,1043210*71   segmento recebido e processado
-rx erro=crc grupo=2 id=118 bytes=25618 descartados=0 ignorados=0 erros_uart=0
+rx erro=crc grupo=2 id=118 bytes=25618 descartados=0 ignorados=0 erros_uart=0 voltas=12 estouros=0
 $ERR,1,2,118,crc*0C                            erro de recepção: grupo, id e motivo
 $ERR,1,,,truncado*60                           erro antes de o cabeçalho chegar: grupo e id vazios
+rx erro=truncado grupo=9 id=29 bytes=5002 descartados=20616 ignorados=0 erros_uart=0 voltas=12 estouros=2 anel=estourado
+$ERR,1,9,29,truncado*52                        o anel do DMA estourou no meio do quadro (emulador, --travar-ms 50)
 ```
 
 (Os escores `ref` acima são do emulador no PC; na placa, a conta com `vfma.f32` dá outros bits.)
 
 - **`$SEG` de origem `S`:** os mesmos campos do de origem `C`. Os `ciclos` somam só o processamento (os quadros do MFCC, o resumo e a LDA), sem a espera pelos bytes.
 - **`$ERR,1,<grupo>,<id>,<motivo>*HH`:** os motivos são `versao`, `formato`, `tamanho`, `crc` e `truncado`. O `magica`, previsto em 29/10, não é mais emitido (30/10): com a busca pela mágica, um quadro com a mágica corrompida é ignorado inteiro, a placa não responde, e o PC reenvia pelo timeout dele. Um erro de recepção não é resultado de segmento: não gasta o `n` do `$SEG` e não entra na contagem do painel. Se o cabeçalho chegou, grupo e id repetem o que veio nele (mesmo que outro campo esteja errado); se o quadro truncou antes, os dois vão vazios. O erro de conta (`disparou` = 4, decisão F) continua no `$SEG`, como antes.
-- **As linhas `ref` e `rx`:** a placa manda, ao entrar no modo, o escore de cada segmento dos clipes da flash pela mesma conta da demonstração (`mfcc_segmento` e `lda_escore`), em hexadecimal; e, antes de cada `$SEG`, a linha `rx`, com o escore do segmento recebido em hexadecimal (o `$SEG` só tem 3 casas). Mandar do PC um segmento dos clipes e comparar os dois hexadecimais é o teste bit a bit do card. A `rx` traz também o tempo de recepção (`ms`, da mágica ao último byte), os bytes ignorados antes da mágica, os que vieram a mais e os erros de linha da UART.
+- **As linhas `ref` e `rx`:** a placa manda, ao entrar no modo, o escore de cada segmento dos clipes da flash pela mesma conta da demonstração (`mfcc_segmento` e `lda_escore`), em hexadecimal; e, antes de cada `$SEG`, a linha `rx`, com o escore do segmento recebido em hexadecimal (o `$SEG` só tem 3 casas). Mandar do PC um segmento dos clipes e comparar os dois hexadecimais é o teste bit a bit do card. A `rx` traz também o tempo de recepção (`ms`, da mágica ao último byte), os bytes ignorados antes da mágica, os que vieram a mais e os erros de linha da UART; desde 04/11, no fim da linha (regra 6), as voltas do anel no pedido (`voltas`, 12 num quadro inteiro: 25.618 B em 2.048) e os estouros do anel no pedido (`estouros`, tem de ser 0), com `anel=estourado` fechando a linha quando houve algum ("Voltas do anel", abaixo).
 - O `ler_pacotes.py` só lê as linhas que começam com `$CAB,` ou `$SEG,`, então `$PED` e `$ERR` passam pela versão 1 do pacote sem mudança. Só a origem `S` pede o leitor atualizado, como foi com a `D`.
 
 ### Erros e silêncio
@@ -832,6 +834,18 @@ A placa não guarda o segmento. Um DMA circular só (`HAL_UART_Receive_DMA`, DMA
 Durante a demonstração, os 64 primeiros bytes do mesmo anel recebem o que chega (um DMA circular de 64 B), para o `RECEBER` não se perder nos `HAL_Delay` nem dar overrun. **Um erro de linha** (ruído, quadro, overrun) faz a HAL abortar a recepção por DMA e chamar o `HAL_UART_ErrorCallback()`, que o `recepcao_serial.c` define: o laço arma o DMA de novo sem zerar o parser, e os bytes perdidos viram `crc` ou `truncado`.
 
 O `recepcao.c` recebe os bytes como chegam, em pedaços de qualquer tamanho, e faz o que o `decimacao_executar()` faz com as saídas do decimador: cada byte do anel é lido **uma vez só**, para uma cópia de 64 B, e o CRC e as amostras saem da cópia. Lendo o anel duas vezes (uma para o CRC, outra para as amostras), um anel sobrescrito entre as duas leituras daria CRC certo com amostras erradas; o emulador abaixo, sem o ritmo da serial, achou exatamente isso na primeira versão. Cada amostra vai para um quadro de 320 do MFCC (640 B), com a sobreposição de 192, e a média e o desvio são acumulados por Welford. São as mesmas chamadas, na mesma ordem, do `mfcc_segmento()`, então as 26 características saem **bit a bit** iguais às do segundo inteiro. Uma amostra pode chegar dividida entre dois pedaços (ou na volta do anel); o parser guarda o primeiro byte até o segundo chegar. O estado do parser ocupa 856 B e o anel, 2 KB: com os buffers de linha, a RAM do firmware sobe cerca de 3,2 KB (de 31,7 KB para 34,9 KB, pelo relatório do linker), contra 25,6 KB de um buffer do quadro inteiro (o PR #9 acabou de tirar um buffer igual). A flash sobe cerca de 4,8 KB (o parser, o modo, as linhas e o caminho de recepção por DMA da HAL). Processar um quadro do MFCC leva ~0,6 ms, e 128 amostras novas levam 22 ms para chegar a 115.200 bit/s (2,8 ms a 921.600), então o parser nunca fica para trás.
+
+### Voltas do anel
+
+Decisão de 03/11 (sugestão da Júlia e da Amanda na revisão do PR #11). A 921.600 bit/s, o anel de 2 KB enche em ~22 ms: se o laço ficar mais que isso sem ler, o DMA escreve por cima de bytes que ainda não foram lidos. Só pelo `NDTR` isso não aparece: uma volta inteira perdida deixa a posição igual, e o quadro virava `crc` ou `truncado` sem o motivo.
+
+O `recepcao_serial.c` define o `HAL_UART_RxHalfCpltCallback()` e o `HAL_UART_RxCpltCallback()`: no modo circular, a HAL chama um na metade do anel e o outro na volta, e os dois contam as metades cheias desde o último armar. Com essa contagem e a posição, o laço sabe quantos bytes o DMA escreveu (`escrito_dma()`) e compara com quantos leu. Se o DMA passou da metade ou da volta e a interrupção ainda não rodou, a metade em que a posição está não bate com a paridade do contador, e a meia que falta entra na conta.
+
+- **Mais de um anel de diferença** (`escrito - lidos > 2.048`): os bytes não lidos já foram sobrescritos. Nada é entregue ao parser, a leitura pula para onde o DMA está, o estouro é contado, e o parser sabe da perda (`recepcao_perder()`): o quadro vira `truncado` na hora, inclusive esperando a mágica (com grupo e id vazios no `$ERR`, como já previsto). Sem isso, um estouro que comesse a mágica deixaria a placa calada, e o motivo não apareceria.
+- **Exatamente um anel de diferença** (o anel cheio, com a posição de escrita igual à de leitura): antes, o laço não lia nada e perdia o anel inteiro na volta seguinte; agora lê os 2.048 bytes.
+- **Byte sobrescrito enquanto era lido:** a conta é refeita depois da leitura; se o DMA passou do byte mais antigo lido, o estouro é contado. Essa conferência é conservadora, então ela só conta: quem decide o quadro é o CRC.
+
+O custo, no build Debug padrão: +496 B de flash e +80 B de RAM pelo relatório do linker (449.740 → 450.236 B e 34.912 → 34.992 B). Pelo `tools/orcamento_memoria.py`, +464 B de flash e os 80 B de RAM ficam na recepção (o contador, as duas interrupções, o `recepcao_perder()` e os campos novos da `rx`; na RAM, o buffer da linha, que passou de 192 para 256 B para a `rx` caber com todos os campos no máximo, e os contadores).
 
 O tempo entra de fora (`agora_ms`: `HAL_GetTick()` na placa, um relógio de mentira no teste), por isso o timeout e o silêncio também são testados no PC.
 
@@ -849,7 +863,8 @@ O `test_recepcao` monta o quadro de cada um dos 10 segmentos dos clipes e confer
 - um bit trocado no corpo, no grupo, no id, no próprio CRC ou no último byte vira `crc` só no fim, sem características;
 - mágica, versão, formato (0 e o 2, reservado) e n_amostras errados viram erro no 18º byte, e o resto é descartado;
 - `truncado` aos 200 ms sem byte, no cabeçalho e no corpo, e não a 199 ms; bytes chegando a cada 199 ms não truncam; sem nenhum byte, não há timeout; e o tempo funciona na volta do contador de ms;
-- depois de um erro, um byte atrasado recomeça a espera do silêncio.
+- depois de um erro, um byte atrasado recomeça a espera do silêncio;
+- bytes perdidos antes do parser (o anel estourado, `recepcao_perder()`): esperando a mágica ou no meio do quadro, viram `truncado` na hora (sem id se a mágica se perdeu) e o silêncio conta a partir da perda; em erro, adiam o silêncio; depois do quadro completo, só são contados.
 
 Testado também com o parser estragado de propósito: amostras em big-endian, o CRC sem conferir ou sem o cabeçalho, o timeout com `>` no lugar de `>=`, o quadro do MFCC sem a sobreposição, o tamanho sem conferir e um byte que não quebra o silêncio reprovam. Um 99º quadro do MFCC passaria, mas é inalcançável: com 12.800 amostras, ele nunca enche.
 
@@ -857,7 +872,7 @@ O teste também confere que o que vem antes da mágica é ignorado: um `RECEBER\
 
 ### A placa no PC (emulador)
 
-O `emular_placa` compila o `recepcao_serial.c` **de verdade** (com o parser, a cadeia, a LDA e o pacote) contra uma HAL de mentira (`tests/host/recepcao/stub/`): a USART1 é um pseudo-terminal, e o DMA circular é uma thread que escreve no anel os bytes que chegam, no ritmo de 115.200 bit/s, e conta o `NDTR` para baixo. O script do PC conversa com ele como com a placa. Não testa a HAL nem o tempo da serial real; testa o diálogo, o anel e a volta dele, o rearme depois de um erro de linha, o parser e as respostas. Só no Linux e no macOS.
+O `emular_placa` compila o `recepcao_serial.c` **de verdade** (com o parser, a cadeia, a LDA e o pacote) contra uma HAL de mentira (`tests/host/recepcao/stub/`): a USART1 é um pseudo-terminal, e o DMA circular é uma thread que escreve no anel os bytes que chegam, no ritmo de 921.600 bit/s (`--baud`), conta o `NDTR` para baixo e chama as interrupções de meia transferência e de transferência completa, como o DMA2 Stream2. O script do PC conversa com ele como com a placa. Não testa a HAL nem o tempo da serial real; testa o diálogo, o anel e a volta dele, o rearme depois de um erro de linha, o parser e as respostas. Só no Linux e no macOS.
 
 ```bash
 ./build/harness/emular_placa &          # imprime a porta: /dev/pts/N
@@ -867,6 +882,13 @@ python3 tests/host/recepcao/enviar_segmento.py --porta /dev/pts/N --seg 88 --est
 
 Resultado em 30/10: os 10 segmentos dos clipes com o escore bit a bit igual ao da linha `ref`; `crc`, `versao`, `formato`, `tamanho` e `truncado` com o `$ERR` certo; a mágica corrompida ignorada e o quadro certo de trás aceito. Com `--baud 0` (os bytes de uma vez, o anel sobrescrito antes de o laço ler), os quadros corrompidos voltam como `$ERR` e nenhum `$SEG` sai com escore errado. Com `--erro-uart 5000`, o quadro do erro de linha volta como `$ERR truncado` e o seguinte passa.
 
+Com `--travar-ms M`, o laço da placa trava uma vez por M ms (dentro do `HAL_GetTick()`) quando o primeiro quadro passa de 5.000 B, e os bytes continuam chegando. Resultado em 04/11, a 921.600 bit/s:
+
+- sem opção, `--todos --erros --seg 88`: os 10 bit a bit, os 5 erros com o `$ERR` certo, a mágica ignorada e a recuperação, com `voltas=12` e `estouros=0` em todas as linhas `rx` (25 voltas no quadro certo depois da mágica corrompida: os dois quadros no mesmo pedido);
+- `--travar-ms 50` (acima dos ~22 ms do anel): o primeiro quadro volta como `$ERR truncado`, com `estouros=2 anel=estourado` na `rx`, e os 9 seguintes passam bit a bit com `estouros=0`; com `--travar-ms 23`, abaixo da folga do emulador, nada estoura;
+- `--erro-uart 9000`: o erro de linha continua aparecendo em `erros_uart`, com `estouros=0`;
+- `--baud 0`: todo quadro corrompido volta como `$ERR truncado` com `anel=estourado`, inclusive o que perdeu a mágica (`$ERR,1,,,truncado`, que antes ficava sem resposta), e nenhum `$SEG` sai com escore errado.
+
 ### O script do PC (mínimo)
 
 O `tests/host/recepcao/enviar_segmento.py` (precisa do `pyserial`) lê os 10 segmentos dos clipes do próprio `Core/Inc/clipes_demo.h`, pede o modo, manda os segmentos com o grupo 9 e o id do segmento, e confere cada resposta: o `$SEG` com origem `S`, grupo e id certos e o escore bit a bit igual ao da linha `ref`; ou, com `--estragar`, o `$ERR` com o motivo certo. É o script do teste do firmware; o da rodada dos 295 e dos 40 é o da Amanda.
@@ -875,6 +897,8 @@ O `tests/host/recepcao/enviar_segmento.py` (precisa do `pyserial`) lê os 10 seg
 python3 tests/host/recepcao/enviar_segmento.py --autoteste                      # sem a placa
 python3 tests/host/recepcao/enviar_segmento.py --porta /dev/ttyUSB0 --todos --erros --seg 88   # com a placa
 ```
+
+Desde 04/11, o script usa 921.600 bit/s por padrão (`--baud 115200` para um firmware antigo) e também reprova uma linha `rx` com `estouros` acima de 0, mesmo que a resposta esteja certa.
 
 O `--erros` manda, na mesma sessão, os seis quadros estragados (`crc`, `versao`, `formato`, `tamanho`, `truncado` e `magica`) e o quadro certo no fim, para mostrar que a placa se recuperou. A placa fica no modo até o reset, e as linhas `ref` só saem ao entrar nele. Ao abrir a porta, o script escuta 3 s: se a placa fala (a demonstração), ele pede o modo; se está calada (já no modo, de uma execução anterior), manda direto, sem a conferência bit a bit. Se chegar uma linha da demonstração no meio dos quadros (a placa reiniciou, por exemplo por um novo "Run and Debug" no VS Code), o script para e avisa, em vez de tomar o `$SEG` da demonstração por resposta.
 
@@ -898,6 +922,7 @@ Captura de 30/10 (build Debug padrão, 115.200 bit/s), versionada em [`docs/rece
 - **Recepção:** 2.219 a 2.220 ms por segmento, da mágica ao último byte (teórico: 25.614 B a 115.200 bit/s = 2.223 ms), com `ignorados=0`, `a_mais=0` e `erros_uart=0` em todas as linhas `rx`.
 - **Processamento:** ~5.843.000 ciclos (58,4 ms, 5,8 % do tempo real) por segmento, os quadros do MFCC, o resumo e a LDA. É o mesmo número da cadeia dentro da decimação (5.843.848 no boot de 31/10, com este firmware), que também soma só as chamadas de cada quadro, e fica 0,2 % abaixo do `ciclos` da demonstração no mesmo boot (5.855.322, mediana dos 10), que mede o `mfcc_segmento()` inteiro, com o laço dos quadros. (O build só com o CRC-32, de 30/10, deu ~5.932.000 na demonstração: a variação de ~1 a 2 % entre builds já registrada na seção "Decimação na placa".) **Fica fora do `ciclos`** o trabalho byte a byte da recepção: o CRC (tabela de meio byte), a cópia do anel e a montagem das amostras, e o deslocamento do quadro do MFCC. A Amanda estima ~3 ms por quadro, sem medir; **a medir na caracterização de novembro**, com o DWT em torno do `consumir()` inteiro, para registrar o custo total da recepção.
 - **921.600 bit/s (31/10, teste à parte):** com o baud da USART1 mudado no `.ioc` numa branch descartável, o mesmo teste passou inteiro: **10/10 bit a bit** com os mesmos `escore_hex`, os 5/5 erros com o `$ERR` certo, a mágica ignorada e a recuperação. Recepção de **306 a 307 ms** por segmento, contra 276,6 ms teóricos (925.926 bit/s reais: com o APB2 a 100 MHz, a HAL grava BRR = 0x6C, USARTDIV 6,75; conta corrigida pela Amanda na revisão do PR); os ~11 % a mais são intervalos entre os bytes no lado do PC e do adaptador, não perda: o quadro chegou inteiro em todos. A rodada dos 335 segmentos cairia de ~13 min para ~2 min. O firmware deste PR **continua a 115.200 bit/s**, como decidido em 29/10: mudar o padrão muda o picocom, os scripts e o painel, e fica para o grupo decidir. Na revisão, a Júlia e a Amanda sugeriram que, se o padrão subir, entre junto um contador de voltas do anel (pelas interrupções de meia transferência e de transferência completa do DMA), mostrado na linha `rx`: a 921.600 bit/s o anel de 2 KB dá ~22 ms de folga, e uma volta perdida hoje só aparece como `crc` ou `truncado`. Captura em [`docs/recepcao-placa-921600-31-10.log`](docs/recepcao-placa-921600-31-10.log).
+- **921.600 bit/s como padrão, com o contador de voltas do anel (04/11):** com o firmware desta mudança (build Debug padrão), o `enviar_segmento.py --todos --erros --seg 88 --salvar` passou inteiro: **10/10 bit a bit**, os 5/5 erros com o `$ERR` certo, a mágica ignorada e o quadro certo depois dos seis. Recepção de **306 a 307 ms** por segmento, como em 31/10, com `ignorados=0`, `a_mais=0` e `erros_uart=0`. Em todas as linhas `rx`, `estouros=0`, e `voltas=12` nos quadros inteiros (6 no truncado, que mandou metade; 25 no quadro certo que veio depois da mágica corrompida, no mesmo pedido). Os `escore_hex` dos 10 segmentos são os mesmos da captura de 31/10, bit a bit: o contador não mexeu na conta. Captura em [`docs/recepcao-placa-921600-04-11.log`](docs/recepcao-placa-921600-04-11.log).
 
 **Memória** (`tools/orcamento_memoria.py`, que agora separa a recepção e o CRC-32), contra o mesmo código sem as três chamadas no `main.c` (o que o `--gc-sections` deixa de fora sem elas é o custo do modo):
 
@@ -911,7 +936,7 @@ Captura de 30/10 (build Debug padrão, 115.200 bit/s), versionada em [`docs/rece
 | aplicação base, alinhamento e reserva da pilha | +21 | +4 |
 | **total** (relatório do linker: 444.924 → 449.740 B de flash, 31.744 → 34.912 B de RAM) | **+4.816** | **+3.168** |
 
-Sobram 72,8 KiB de flash e 93,9 KiB de RAM.
+Sobram 72,8 KiB de flash e 93,9 KiB de RAM. Com o contador de voltas do anel (04/11): +496 B de flash e +80 B de RAM (450.236 B e 34.992 B); sobram 72,3 KiB de flash e 93,8 KiB de RAM.
 
 ## Validação bloco a bloco
 
@@ -936,7 +961,7 @@ A validação independente da cadeia em C (card "Validar cada bloco da cadeia em
 | Primeira inferência de ponta a ponta no laço, do `int16` a 51,2 kHz ao escore (22/10) | 17.446.485 ciclos = 174,46 ms (17,4 % do tempo real): decimação 116,03 ms, cadeia 58,44 ms. Seção "Primeira inferência de ponta a ponta" |
 | Decimação de 1 s de áudio na placa, primeira captura (antes da revisão do PR #9, 20/10) | 19.479.794 ciclos = 194,8 ms (19,5 % do tempo real), dos quais 172,1 ms no FIR; do `int16` a 51,2 kHz ao escore, 256,9 ms (25,7 %) |
 | Build padrão com a decimação, depois da revisão do PR #9 (cadeia quadro a quadro, sem o buffer do segundo inteiro, `ARM_MATH_LOOPUNROLL`) | 439.376 B de flash (83,8 %) e 31.536 B de RAM (24,1 %), relatório do linker com o STM32CubeCLT (o build gravado na placa); a decimação ocupa 7.016 B de RAM. Antes da revisão: 436.600 B e 55.744 B |
-| Recepção de um segmento pela serial a 921.600 bit/s (31/10, teste com o `.ioc` mudado; o firmware continua a 115.200) | 306 a 307 ms (teórico 276,6 ms, a 925.926 bit/s reais), 10/10 bit a bit, sem erros de linha. Seção "Recepção de segmentos pela serial" |
+| Recepção de um segmento pela serial a 921.600 bit/s (31/10, teste com o `.ioc` mudado; o padrão desde 04/11, decisão de 03/11) | 306 a 307 ms (teórico 276,6 ms, a 925.926 bit/s reais), 10/10 bit a bit, sem erros de linha. Seção "Recepção de segmentos pela serial" |
 | Recepção de um segmento pela serial a 115.200 bit/s (30/10) | 2.219 a 2.220 ms (teórico 2.223 ms), sem bytes perdidos; processamento de ~5.843.000 ciclos = 58,4 ms (5,8 % do tempo real). Seção "Recepção de segmentos pela serial" |
 | Build padrão com o modo de recepção (30/10) | 449.740 B de flash (85,8 %) e 34.912 B de RAM (26,6 %), relatório do linker (gcc 13.2.1); +4.816 B e +3.168 B sobre o build sem as chamadas, dos quais 2.567 B de flash e 3.164 B de RAM são o `recepcao.c` e o `recepcao_serial.c` |
 | Build padrão com a primeira inferência de ponta a ponta no laço (22/10) | 440.676 B de flash (84,1 %) e 31.648 B de RAM (24,1 %), relatório do linker (gcc 13.2.1); +1.300 B e +112 B sobre o build do PR #9. No `tools/orcamento_memoria.py`, a decimação passa a 6.108 B de flash e 7.125 B de RAM |

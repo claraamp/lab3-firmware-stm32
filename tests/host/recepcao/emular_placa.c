@@ -4,14 +4,15 @@
  * Compila o Core/Src/recepcao_serial.c DE VERDADE (com o parser, a cadeia, a LDA e o
  * pacote) contra uma HAL de mentira (stub/main.h): a USART1 e um pseudo-terminal, e
  * o DMA circular e uma thread que escreve no anel os bytes que chegam e conta o
- * NDTR para baixo, como o DMA2 Stream2. O enviar_segmento.py conversa com ele como
+ * NDTR para baixo, como o DMA2 Stream2, chamando as interrupcoes de meia
+ * transferencia e de transferencia completa. O enviar_segmento.py conversa com ele como
  * com a placa. Nao testa a HAL nem o tempo da serial real (o pseudo-terminal nao
  * tem baud): testa o dialogo, o anel, a volta do anel, o parser e as respostas.
  *
  *   ./build/harness/emular_placa &             # imprime a porta: /dev/pts/N
  *   python3 tests/host/recepcao/enviar_segmento.py --porta /dev/pts/N --todos
  *
- * Os bytes chegam no ritmo de --baud (padrao 115200: 87 us por byte), como na UART.
+ * Os bytes chegam no ritmo de --baud (padrao 921600: 10,9 us por byte), como na UART.
  * Com --baud 0, chegam de uma vez, o anel de 2 KB da a volta antes de o laco ler,
  * e os quadros se corrompem: a placa tem de responder $ERR (crc ou truncado), e
  * NUNCA um $SEG com escore errado (o CRC tem de pegar tudo).
@@ -19,6 +20,12 @@
  * Com --erro-uart K, a thread do DMA simula UM erro de linha (a HAL aborta o DMA e
  * chama o HAL_UART_ErrorCallback) no K-esimo byte do primeiro quadro: o laco tem de
  * rearmar e responder $ERR (crc ou truncado), e o quadro seguinte tem de passar.
+ *
+ * Com --travar-ms M, o laco da placa trava UMA vez por M ms (no HAL_GetTick) quando o
+ * primeiro quadro passa de 5.000 B, enquanto os bytes continuam chegando: com M acima
+ * dos ~22 ms que o anel de 2 KB aguenta a 921.600 bit/s, o anel estoura. A linha rx
+ * tem de mostrar "anel=estourado" e estouros >= 1, a placa tem de responder $ERR
+ * (truncado ou crc), e o quadro seguinte tem de passar com estouros=0.
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
@@ -34,9 +41,7 @@
 #include "mfcc_estagios.h"
 #include "recepcao_serial.h"
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart);
-
-UART_HandleTypeDef huart1 = {{115200u}, NULL};
+UART_HandleTypeDef huart1 = {{921600u}, NULL};
 DWT_Type emul_dwt = {0u};
 uint32_t SystemCoreClock = 100000000u;
 
@@ -47,8 +52,10 @@ static volatile uint32_t tam = 0u;
 static atomic_uint ndtr = 0u;
 static atomic_int armado = 0;
 static long erro_no_byte = -1;   /* --erro-uart */
-static long baud = 115200;       /* --baud; 0 = sem ritmo */
+static long baud = 921600;       /* --baud; 0 = sem ritmo */
 static long bytes_recebidos = 0;
+static long travar_ms = 0;       /* --travar-ms */
+static atomic_long bytes_no_anel = 0;   /* do armar do anel grande, para o --travar-ms */
 
 uint32_t emul_ndtr(void) { return atomic_load(&ndtr); }
 void emul_limpar_erros(void) {}
@@ -74,6 +81,7 @@ HAL_StatusTypeDef HAL_UART_Receive_DMA(UART_HandleTypeDef *h, uint8_t *dados, ui
     anel = dados;
     tam = n;
     atomic_store(&ndtr, n);
+    atomic_store(&bytes_no_anel, 0);
     atomic_store(&armado, 1);
     pthread_mutex_unlock(&trava);
     return HAL_OK;
@@ -97,13 +105,20 @@ void HAL_GPIO_WritePin(int porta, int pino, GPIO_PinState estado)
 
 uint32_t HAL_GetTick(void)
 {
+    static int travou = 0;
+    if (travar_ms > 0 && !travou && tam > 64u && atomic_load(&bytes_no_anel) > 5000) {
+        travou = 1;   /* o laco para; o "DMA" continua escrevendo no anel */
+        usleep((useconds_t)(travar_ms * 1000L));
+    }
     struct timespec t;
     clock_gettime(CLOCK_MONOTONIC, &t);
     return (uint32_t)(t.tv_sec * 1000 + t.tv_nsec / 1000000);
 }
 
 /* O "DMA": cada byte que chega vai para anel[tam - ndtr], e o NDTR desce; na volta,
- * recarrega (modo circular). Desarmado, o byte se perde (como o overrun). */
+ * recarrega (modo circular). Na metade e na volta, chama as interrupcoes de meia
+ * transferencia e de transferencia completa, como a HAL_DMA_IRQHandler. Desarmado,
+ * o byte se perde (como o overrun). */
 static void *dma(void *arg)
 {
     (void)arg;
@@ -132,6 +147,12 @@ static void *dma(void *arg)
             __atomic_thread_fence(__ATOMIC_RELEASE);
             const uint32_t novo = atomic_load(&ndtr) - 1u;
             atomic_store(&ndtr, novo == 0u ? tam : novo);
+            atomic_fetch_add(&bytes_no_anel, 1);
+            if (novo == tam / 2u) {
+                HAL_UART_RxHalfCpltCallback(&huart1);
+            } else if (novo == 0u) {
+                HAL_UART_RxCpltCallback(&huart1);
+            }
         }
         pthread_mutex_unlock(&trava);
     }
@@ -145,6 +166,8 @@ int main(int argc, char **argv)
             erro_no_byte = atol(argv[i + 1]);
         } else if (strcmp(argv[i], "--baud") == 0) {
             baud = atol(argv[i + 1]);
+        } else if (strcmp(argv[i], "--travar-ms") == 0) {
+            travar_ms = atol(argv[i + 1]);
         }
     }
     mestre = posix_openpt(O_RDWR | O_NOCTTY);

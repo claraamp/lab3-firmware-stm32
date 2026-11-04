@@ -210,6 +210,30 @@ recepcao_estado_t recepcao_receber(recepcao_t *r, const uint8_t *dados, size_t n
     return r->estado;
 }
 
+recepcao_estado_t recepcao_perder(recepcao_t *r, size_t n, uint32_t agora_ms)
+{
+    if (n == 0u) {
+        return r->estado;
+    }
+    r->ultimo_ms = agora_ms;   /* os bytes chegaram: o silencio conta a partir daqui */
+    switch (r->estado) {
+    case RECEPCAO_COMPLETO:
+        r->n_a_mais += (uint32_t)n;
+        break;
+    case RECEPCAO_ESPERANDO:
+    case RECEPCAO_EM_ANDAMENTO:
+        erro(r, RECEPCAO_E_TRUNCADO, agora_ms);
+        r->n_descartados += (uint32_t)n;
+        break;
+    case RECEPCAO_ERRO:
+    case RECEPCAO_SILENCIO:
+        r->estado = RECEPCAO_ERRO;
+        r->n_descartados += (uint32_t)n;
+        break;
+    }
+    return r->estado;
+}
+
 recepcao_estado_t recepcao_tempo(recepcao_t *r, uint32_t agora_ms)
 {
     const uint32_t calado = agora_ms - r->ultimo_ms;

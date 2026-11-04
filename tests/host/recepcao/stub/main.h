@@ -31,6 +31,10 @@ HAL_StatusTypeDef HAL_UART_Receive_DMA(UART_HandleTypeDef *h, uint8_t *dados, ui
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *h);
 void HAL_GPIO_WritePin(int porta, int pino, GPIO_PinState estado);
 uint32_t HAL_GetTick(void);
+/* na HAL de verdade, no stm32f4xx_hal_uart.h; definidos no recepcao_serial.c */
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart);
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart);
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart);
 uint32_t emul_ndtr(void);
 void emul_limpar_erros(void);
 
