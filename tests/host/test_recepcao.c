@@ -18,7 +18,11 @@
  *   - depois de um erro, so o silencio libera o proximo pedido, e um byte no meio
  *     recomeca a espera;
  *   - esperando o primeiro byte, nao ha timeout; e o tempo funciona na volta do
- *     contador de ms.
+ *     contador de ms;
+ *   - bytes perdidos antes do parser (o anel do DMA estourado, recepcao_perder):
+ *     esperando a magica ou no meio do quadro, viram truncado na hora (sem id se a
+ *     magica se perdeu), e o silencio vale a partir da perda; em erro, adiam o
+ *     silencio; depois do quadro completo, so contam.
  *
  *   cmake -S tests/host/harness -B build/harness -G Ninja && cmake --build build/harness
  *   ./build/harness/test_recepcao     # TEST RECEPCAO OK, na saida de erro
@@ -303,6 +307,37 @@ static void teste_silencio_depois_do_erro(void)
     CONFERIR(r.estado == RECEPCAO_ERRO, "byte depois do silencio nao voltou a esperar");
 }
 
+static void teste_perder(void)
+{
+    montar(pcm_segmento(5), 1, 55u, 1, 1, RECEPCAO_N_AMOSTRAS);
+
+    /* esperando a magica: truncado sem id, e o $ERR sai depois do silencio */
+    recepcao_iniciar(&r, NULL, 0u);
+    CONFERIR(recepcao_perder(&r, 0u, 10u) == RECEPCAO_ESPERANDO, "perder 0 bytes mudou o estado");
+    CONFERIR(recepcao_perder(&r, 2100u, 100u) == RECEPCAO_ERRO && r.motivo == RECEPCAO_E_TRUNCADO && !r.tem_id
+                 && r.n_descartados == 2100u,
+             "perda esperando a magica (estado %d motivo %s)", (int)r.estado, recepcao_motivo_texto(r.motivo));
+    recepcao_receber(&r, &quadro[2100], 5000u, 150u);   /* o resto do quadro chegando */
+    CONFERIR(recepcao_tempo(&r, 150u + RECEPCAO_SILENCIO_MS - 1u) == RECEPCAO_ERRO, "perda: silencio cedo");
+    CONFERIR(recepcao_tempo(&r, 150u + RECEPCAO_SILENCIO_MS) == RECEPCAO_SILENCIO && r.n_descartados == 7100u,
+             "perda: sem silencio ou descartados %lu", (unsigned long)r.n_descartados);
+
+    /* no meio do quadro: truncado com o id, na hora */
+    recepcao_iniciar(&r, NULL, 0u);
+    recepcao_receber(&r, quadro, 6000u, 10u);
+    CONFERIR(recepcao_perder(&r, 2500u, 20u) == RECEPCAO_ERRO && r.motivo == RECEPCAO_E_TRUNCADO && r.tem_id
+                 && r.id == 55u && r.n_bytes == 6000u,
+             "perda no meio do quadro");
+    CONFERIR(recepcao_tempo(&r, 20u + RECEPCAO_SILENCIO_MS) == RECEPCAO_SILENCIO, "perda: o silencio nao contou dela");
+
+    /* em erro: adia o silencio e conta; depois do quadro completo: so conta */
+    recepcao_perder(&r, 10u, 500u);
+    CONFERIR(r.estado == RECEPCAO_ERRO && r.n_descartados == 2510u, "perda em silencio nao voltou a esperar");
+    recepcao_iniciar(&r, NULL, 0u);
+    recepcao_receber(&r, quadro, RECEPCAO_TAM_QUADRO, 10u);
+    CONFERIR(recepcao_perder(&r, 64u, 20u) == RECEPCAO_COMPLETO && r.n_a_mais == 64u, "perda depois do quadro");
+}
+
 int main(void)
 {
     if (mfcc_estagios_init() != 0) {
@@ -323,12 +358,13 @@ int main(void)
     teste_cabecalho(1, 1, 12799u, RECEPCAO_E_TAMANHO);
     teste_truncado();
     teste_silencio_depois_do_erro();
+    teste_perder();
 
     if (falhas) {
         fprintf(stderr, "TEST RECEPCAO FALHOU (%d)\n", falhas);
         return 1;
     }
     fprintf(stderr, "TEST RECEPCAO OK (10 segmentos bit a bit em 5 padroes de pedacos, lixo antes da magica, a mais, "
-                    "crc, cabecalho, truncado, silencio)\n");
+                    "crc, cabecalho, truncado, silencio, perda no anel)\n");
     return 0;
 }

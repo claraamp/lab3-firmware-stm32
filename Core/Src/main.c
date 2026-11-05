@@ -167,7 +167,7 @@ int main(void)
 #ifdef FIRMWARE_BLOCOS13
   /* Blocos 1 a 3 (janela, espectro e Mel) nos segmentos de referencia: ciclos pelo
    * DWT e a saida de cada bloco pela serial, para o receber_blocos13.py. Cerca de
-   * 100 s a 115200 baud; o marco vem depois. */
+   * 100 s a 115200 baud (o padrao ate 03/11; a 921.600, ainda nao medido); o marco vem depois. */
   blocos13_executar();
 #endif
 

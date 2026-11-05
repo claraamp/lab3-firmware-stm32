@@ -19,6 +19,11 @@
  * O DMA so le a UART; o envio continua pelo HAL_UART_Transmit bloqueante. Um erro
  * de linha (ruido, quadro, overrun) faz a HAL abortar a recepcao por DMA: o
  * HAL_UART_ErrorCallback() daqui marca, e o laco arma o DMA de novo.
+ *
+ * A 921.600 bit/s (padrao desde 03/11), o anel de 2 KB enche em ~22 ms. Os
+ * HAL_UART_RxHalfCpltCallback() e HAL_UART_RxCpltCallback() daqui contam as voltas
+ * do anel; se o DMA passar mais de um anel a frente da leitura, a linha rx mostra
+ * "anel=estourado" e o campo estouros (ver recepcao_serial.c).
  */
 
 #ifndef RECEPCAO_SERIAL_H

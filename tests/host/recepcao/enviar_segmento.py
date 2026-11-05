@@ -12,10 +12,17 @@ confere cada resposta:
   - com o quadro certo, o $SEG tem de vir com origem S, grupo e id do quadro, e o
     escore (escore_hex da linha rx) tem de ser BIT A BIT o da linha ref que a placa
     mandou para o mesmo segmento da flash, com a mesma decisao;
+  - o campo estouros da linha rx tem de ser 0: com o anel do DMA estourado (a
+    placa leu devagar demais e perdeu bytes), a linha rx traz "anel=estourado" e o
+    teste falha, mesmo que a resposta pareca certa. O campo e um alarme
+    conservador (conta deteccoes, e pode marcar um quadro que passou no CRC): no
+    pior caso, um reenvio. O campo voltas e so informativo e nao reprova nada;
   - com --estragar, o quadro sai errado de proposito e a placa tem de responder
     $ERR com o motivo certo (crc, versao, formato, tamanho, truncado); com
     --estragar magica, a placa tem de ignorar o quadro (nenhuma resposta) e aceitar
     o quadro certo mandado logo depois.
+
+Baud padrao: 921.600 bit/s (decisao de 03/11); para um firmware antigo, --baud 115200.
 
 Uso (placa gravada com o firmware da recepcao, sem o picocom aberto):
     python3 tests/host/recepcao/enviar_segmento.py --porta /dev/ttyUSB0 --seg 29
@@ -189,6 +196,20 @@ class Placa:
         return rx, resp
 
 
+def estouros(rx):
+    """O campo estouros da linha rx (None se a linha nao tem: firmware antes de 04/11)."""
+    m = re.search(r"\bestouros=(\d+)", rx or "")
+    return int(m.group(1)) if m else None
+
+
+def conferir_anel(rx, problemas):
+    n = estouros(rx)
+    if n:
+        problemas.append(f"anel estourado ({n} estouro(s))")
+    v = re.search(r"\bvoltas=(\d+)", rx or "")
+    return f", voltas={v.group(1)} estouros={n}" if v else ""
+
+
 def conferir_seg(resp, rx, id_seg, refs):
     campos = resp.split("*")[0].split(",")
     origem, grupo, seg, decisao, escore = campos[3], int(campos[4]), int(campos[5]), campos[6], campos[8]
@@ -207,8 +228,9 @@ def conferir_seg(resp, rx, id_seg, refs):
     else:
         bit = f"DIFERE (ref {ref})"
         problemas.append(f"escore {hexa}: {bit}")
-    t = re.search(r"ms=(\d+)", rx or "")
-    return problemas, f"{decisao} escore={escore} {hexa} {bit}, recepcao {t.group(1) if t else '?'} ms"
+    t = re.search(r"\bms=(\d+)", rx or "")
+    anel = conferir_anel(rx, problemas)
+    return problemas, f"{decisao} escore={escore} {hexa} {bit}, recepcao {t.group(1) if t else '?'} ms{anel}"
 
 
 def testar_erros(placa, clipes, id_seg):
@@ -224,6 +246,7 @@ def testar_erros(placa, clipes, id_seg):
                   f"{'ignorado (nenhuma resposta)' if ok else 'a placa respondeu ' + str(resp)}")
         else:
             ok = resp is not None and resp.startswith("$ERR,") and resp.split("*")[0].endswith("," + como)
+            ok = ok and not estouros(rx)   # o erro tem de ser o do quadro, nao o do anel
             print(f"erro {como}: {'OK' if ok else 'FALHOU'}: {rx} | {resp}")
         falhas += not ok
     rx, resp = placa.mandar(quadro)
@@ -261,6 +284,7 @@ def rodar(args):
                     print(f"{rotulo} magica: ignorado (nenhuma resposta), como esperado; agora o quadro certo")
             else:
                 ok = resp is not None and resp.startswith("$ERR,") and resp.split("*")[0].endswith("," + args.estragar)
+                ok = ok and not estouros(rx)
                 print(f"{rotulo} {args.estragar}: {'OK' if ok else 'FALHOU'}: {rx} | {resp}")
                 falhas += not ok
                 continue
@@ -316,7 +340,7 @@ def autoteste():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--porta", help="porta da serial (ex.: /dev/ttyUSB0, COM5)")
-    ap.add_argument("--baud", type=int, default=115200, help="o mesmo do firmware (padrao 115200)")
+    ap.add_argument("--baud", type=int, default=921600, help="o mesmo do firmware (padrao 921600)")
     ap.add_argument("--seg", type=int, default=29, help="id do segmento dos clipes (29, 30, 88, ...)")
     ap.add_argument("--todos", action="store_true", help="os 10 segmentos dos clipes, em sequencia")
     ap.add_argument("--erros", action="store_true",

@@ -208,7 +208,7 @@ def main() -> int:
     fonte = ap.add_mutually_exclusive_group(required=True)
     fonte.add_argument("--porta", help="porta serial do adaptador (ex.: /dev/ttyUSB0, COM5)")
     fonte.add_argument("--arquivo", type=Path, help="captura gravada antes, em vez da serial")
-    ap.add_argument("--baud", type=int, default=115200)
+    ap.add_argument("--baud", type=int, default=921600, help="o mesmo do firmware (padrao 921600, desde 03/11)")
     ap.add_argument("--timeout", type=float, default=60.0, help="segundos sem dados ate desistir")
     ap.add_argument("--refs", type=Path, default=REFS_PADRAO, help="pasta das referencias por estagio")
     ap.add_argument("--saida", type=Path, default=SAIDA_PADRAO, help="onde gravar a captura e os .f32")

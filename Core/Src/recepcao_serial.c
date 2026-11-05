@@ -32,18 +32,48 @@ static uint8_t anel[ANEL_RX];
 static uint32_t tam_anel = 0u;   /* tamanho armado no DMA */
 static uint32_t pos_lida = 0u;   /* proximo byte a ler do anel */
 
+/* Voltas do anel (decisao de 03/11, sugestao da Julia e da Amanda no PR #11). As
+ * interrupcoes de meia transferencia e de transferencia completa do DMA contam as
+ * metades do anel que o DMA ja encheu desde o armar(). Com elas e o NDTR, o laco
+ * sabe quantos bytes o DMA escreveu (escrito_dma) e compara com quantos leu
+ * (lidos): mais de um anel de diferenca e byte sobrescrito antes de ser lido, o
+ * "anel estourado". So pelo NDTR, uma volta inteira perdida deixa a posicao igual
+ * e passa despercebida; o quadro vira crc ou truncado sem o motivo aparecer.
+ * A 921.600 bit/s, o anel de 2 KB da cerca de 22 ms de folga ao laco. */
+static volatile uint32_t meias = 0u;   /* metades do anel cheias (nas interrupcoes) */
+static uint32_t lidos = 0u;            /* bytes lidos do anel desde o armar() */
+static uint32_t n_estouros = 0u;       /* deteccoes desde o boot, como o n_erros_uart */
+static uint32_t estouros_no_pedido = 0u;
+
 /* A HAL aborta a recepcao por DMA em qualquer erro de linha e chama o callback. */
 static volatile uint8_t erro_uart = 0u;
 static uint32_t n_erros_uart = 0u;
 
 static recepcao_t rx;            /* estatico, e nao na pilha (856 B) */
-static char linha[192];
+static char linha[256];   /* a linha rx com todos os campos no maximo passa de 192 */
 _Static_assert(sizeof linha >= PACOTE_TAM_MAX, "o $SEG tem que caber no buffer");
 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
     if (huart == &huart1) {
         erro_uart = 1u;
+    }
+}
+
+/* Meia transferencia (o DMA escreveu a ultima posicao da primeira metade) e
+ * transferencia completa (a ultima do anel; no modo circular, o NDTR recarrega e o
+ * DMA continua da posicao 0). */
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &huart1) {
+        ++meias;
+    }
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+    if (huart == &huart1) {
+        ++meias;
     }
 }
 
@@ -79,6 +109,8 @@ static void armar(uint32_t n)
     erro_uart = 0u;
     tam_anel = n;
     pos_lida = 0u;
+    meias = 0u;   /* o DMA esta parado: nenhuma interrupcao dele ate o Receive_DMA */
+    lidos = 0u;
     if (HAL_UART_Receive_DMA(&huart1, anel, (uint16_t)n) != HAL_OK) {
         erro_uart = 1u;   /* tenta de novo na proxima volta do laco */
     }
@@ -89,6 +121,25 @@ static uint32_t pos_dma(void)
 {
     const uint32_t p = tam_anel - (uint32_t)__HAL_DMA_GET_COUNTER(huart1.hdmarx);
     return p >= tam_anel ? 0u : p;
+}
+
+/* Bytes que o DMA escreveu desde o armar(): as voltas inteiras (meias / 2) vezes o
+ * anel, mais a posicao. O contador e o NDTR sao lidos de novo se uma interrupcao
+ * rodou entre as duas leituras. Se o DMA acabou de passar da metade ou da volta e
+ * a interrupcao ainda nao rodou, a metade em que a posicao esta nao bate com a
+ * paridade do contador: falta uma meia, que entra na conta. */
+static uint32_t escrito_dma(void)
+{
+    uint32_t m, p;
+    do {
+        m = meias;
+        p = pos_dma();
+    } while (m != meias);
+    const uint32_t na_segunda = p >= tam_anel / 2u ? 1u : 0u;
+    if ((m & 1u) != na_segunda) {
+        ++m;
+    }
+    return (m / 2u) * tam_anel + p;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -155,22 +206,59 @@ static void enviar_referencias(void)
 }
 
 /* Entrega ao parser os bytes que o DMA escreveu desde a ultima leitura (em dois
- * pedacos quando o anel deu a volta) e devolve o estado. */
+ * pedacos quando o anel deu a volta) e devolve o estado. Com o anel estourado (o
+ * DMA escreveu mais de um anel a frente da leitura), os bytes nao lidos ja foram
+ * sobrescritos: nada e entregue, a leitura pula para onde o DMA esta, o estouro e
+ * contado e o parser sabe da perda (recepcao_perder: o quadro vira truncado na hora,
+ * mesmo se a magica se perdeu), e a linha rx mostra o motivo. Um byte sobrescrito
+ * enquanto era lido tambem conta, mas so no contador: a conferencia e feita depois
+ * da leitura e e conservadora, e o CRC do quadro decide. */
 static recepcao_estado_t consumir(void)
 {
-    const uint32_t fim = pos_dma();
+    const uint32_t escrito = escrito_dma();
+    const uint32_t n = escrito - lidos;
     recepcao_estado_t e = rx.estado;
-    if (fim != pos_lida) {
+    if (n > tam_anel) {
+        ++n_estouros;
+        e = recepcao_perder(&rx, n, HAL_GetTick());
+        lidos = escrito;
+        pos_lida = lidos % tam_anel;
+        return e;
+    }
+    if (n > 0u) {
         const uint32_t agora = HAL_GetTick();
-        if (fim > pos_lida) {
-            e = recepcao_receber(&rx, &anel[pos_lida], fim - pos_lida, agora);
+        const uint32_t ate_o_fim = tam_anel - pos_lida;
+        if (n <= ate_o_fim) {
+            e = recepcao_receber(&rx, &anel[pos_lida], n, agora);
         } else {
-            e = recepcao_receber(&rx, &anel[pos_lida], tam_anel - pos_lida, agora);
-            e = recepcao_receber(&rx, anel, fim, agora);
+            e = recepcao_receber(&rx, &anel[pos_lida], ate_o_fim, agora);
+            e = recepcao_receber(&rx, anel, n - ate_o_fim, agora);
         }
-        pos_lida = fim;
+        /* o mais antigo dos bytes lidos (o de numero `lidos`) e sobrescrito quando o
+         * DMA escreve o de numero lidos + tam_anel */
+        if (escrito_dma() - lidos > tam_anel) {
+            ++n_estouros;
+        }
+        lidos += n;
+        pos_lida = lidos % tam_anel;
     }
     return e;
+}
+
+/* Voltas do anel e estouros do pedido atual, para as linhas rx. O estouros e um
+ * alarme conservador: conta deteccoes (um estouro pode ser visto duas vezes, depois
+ * da leitura e antes da seguinte), e a conferencia depois da leitura pode marcar um
+ * quadro que passou no CRC. So o zero e garantia. Entram no fim das
+ * linhas (regra 6 do README: campo novo da rx so no fim), e com estouro o texto
+ * " anel=estourado" fecha a linha. */
+static uint32_t voltas(void)
+{
+    return tam_anel ? lidos / tam_anel : 0u;
+}
+
+static uint32_t estouros_do_pedido(void)
+{
+    return n_estouros - estouros_no_pedido;
 }
 
 /* Um quadro completo e com o CRC certo: caracteristicas, LDA, linha rx e $SEG. */
@@ -195,11 +283,12 @@ static void responder_segmento(void)
     memcpy(&bits, &escore, sizeof bits);
     enviar_linha(snprintf(linha, sizeof linha,
                           "rx grupo=%u id=%lu bytes=%lu ms=%lu ignorados=%lu a_mais=%lu erros_uart=%lu "
-                          "ciclos=%lu escore_hex=0x%08lX\r\n",
+                          "ciclos=%lu escore_hex=0x%08lX voltas=%lu estouros=%lu%s\r\n",
                           (unsigned)rx.grupo, (unsigned long)rx.id, (unsigned long)rx.n_bytes,
                           (unsigned long)(rx.fim_ms - rx.inicio_ms), (unsigned long)rx.n_ignorados,
                           (unsigned long)rx.n_a_mais, (unsigned long)n_erros_uart, (unsigned long)ciclos,
-                          (unsigned long)bits));
+                          (unsigned long)bits, (unsigned long)voltas(), (unsigned long)estouros_do_pedido(),
+                          estouros_do_pedido() ? " anel=estourado" : ""));
     enviar_linha(pacote_linha(linha, sizeof linha, &p));
     if (p.disparou & PACOTE_ERRO) {
         leds(1, 1);   /* a conta deu errado: os dois, nunca o verde sozinho */
@@ -217,10 +306,12 @@ static void responder_erro(void)
         snprintf(id, sizeof id, "%lu", (unsigned long)rx.id);
     }
     enviar_linha(snprintf(linha, sizeof linha,
-                          "rx erro=%s grupo=%s id=%s bytes=%lu descartados=%lu ignorados=%lu erros_uart=%lu\r\n",
+                          "rx erro=%s grupo=%s id=%s bytes=%lu descartados=%lu ignorados=%lu erros_uart=%lu "
+                          "voltas=%lu estouros=%lu%s\r\n",
                           recepcao_motivo_texto(rx.motivo), grupo, id, (unsigned long)rx.n_bytes,
                           (unsigned long)rx.n_descartados, (unsigned long)rx.n_ignorados,
-                          (unsigned long)n_erros_uart));
+                          (unsigned long)n_erros_uart, (unsigned long)voltas(), (unsigned long)estouros_do_pedido(),
+                          estouros_do_pedido() ? " anel=estourado" : ""));
     enviar_linha(pacote_erro_recepcao(linha, sizeof linha, rx.tem_id, rx.grupo, rx.id,
                                       recepcao_motivo_texto(rx.motivo)));
     leds(0, 0);
@@ -249,6 +340,7 @@ void recepcao_serial_executar(int ok)
     for (;;) {
         armar(ANEL_RX);
         recepcao_iniciar(&rx, ler_dwt, HAL_GetTick());
+        estouros_no_pedido = n_estouros;
         enviar_linha(pacote_pedido(linha, sizeof linha, ++pedidos));
 
         recepcao_estado_t e;

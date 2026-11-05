@@ -27,6 +27,7 @@ Este script e a referencia de leitura para o painel de novembro:
 Uso, com a placa ligada ao adaptador USB-TTL:
     python3 tests/host/pacote/ler_pacotes.py --porta /dev/ttyUSB0 --segundos 30   # Linux
     python  tests/host/pacote/ler_pacotes.py --porta COM5 --segundos 30           # Windows
+  (921.600 bit/s por padrao, desde 03/11; para um firmware antigo, --baud 115200)
   e aperte o RESET da placa para pegar tambem o $CAB.
 
 A partir de uma captura (do picocom, do --salvar ou do test_pacote_serial):
@@ -198,7 +199,7 @@ def linhas_arquivo(caminho: Path):
             yield bruta.decode("ascii", errors="replace")
 
 
-def linhas_porta(porta: str, segundos: float, salvar: Path | None):
+def linhas_porta(porta: str, segundos: float, salvar: Path | None, baud: int = 921600):
     try:
         import serial  # pyserial
     except ImportError:
@@ -206,7 +207,7 @@ def linhas_porta(porta: str, segundos: float, salvar: Path | None):
     destino = open(salvar, "wb") if salvar else None
     fim = time.monotonic() + segundos
     try:
-        with serial.Serial(porta, 115200, timeout=0.5) as s:
+        with serial.Serial(porta, baud, timeout=0.5) as s:
             while time.monotonic() < fim:
                 bruta = s.readline()
                 if not bruta:
@@ -377,6 +378,7 @@ def main():
     fonte.add_argument("--arquivo", type=Path, help="captura salva antes")
     fonte.add_argument("--autoteste", action="store_true", help="testa o proprio script")
     ap.add_argument("--segundos", type=float, default=30.0, help="tempo de leitura com --porta")
+    ap.add_argument("--baud", type=int, default=921600, help="com --porta, o mesmo do firmware (padrao 921600)")
     ap.add_argument("--salvar", type=Path, help="com --porta, grava a captura bruta neste arquivo")
     ap.add_argument("--csv", type=Path, help="grava os segmentos lidos neste CSV")
     ap.add_argument("--resumo", action="store_true", help="so os erros e o resumo, sem uma linha por segmento")
@@ -386,7 +388,7 @@ def main():
         return autoteste()
     try:
         linhas = (linhas_arquivo(args.arquivo) if args.arquivo
-                  else linhas_porta(args.porta, args.segundos, args.salvar))
+                  else linhas_porta(args.porta, args.segundos, args.salvar, args.baud))
         n_ok, n_ruins = processar(linhas, mostrar=not args.resumo, saida_csv=args.csv)
     except OSError as e:
         print(f"nao deu para ler a fonte: {e}")
