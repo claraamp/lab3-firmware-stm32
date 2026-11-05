@@ -14,7 +14,9 @@ confere cada resposta:
     mandou para o mesmo segmento da flash, com a mesma decisao;
   - o campo estouros da linha rx tem de ser 0: com o anel do DMA estourado (a
     placa leu devagar demais e perdeu bytes), a linha rx traz "anel=estourado" e o
-    teste falha, mesmo que a resposta pareca certa;
+    teste falha, mesmo que a resposta pareca certa. O campo e um alarme
+    conservador (conta deteccoes, e pode marcar um quadro que passou no CRC): no
+    pior caso, um reenvio. O campo voltas e so informativo e nao reprova nada;
   - com --estragar, o quadro sai errado de proposito e a placa tem de responder
     $ERR com o motivo certo (crc, versao, formato, tamanho, truncado); com
     --estragar magica, a placa tem de ignorar o quadro (nenhuma resposta) e aceitar

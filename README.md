@@ -86,7 +86,7 @@ No PC o gcc não funde multiplicação e soma; no Cortex-M4 funde (`vfma.f32`). 
 | PA13 / PA14 | SWDIO / SWCLK | ST-Link |
 | PH0 / PH1 | cristal HSE | já ligado na placa |
 
-Serial: **921.600 baud, 8N1** (padrão desde 03/11, decisão "Recepção pela serial a 921.600 bit/s como padrão, com contador de voltas do anel"; até então, 115.200). TX e RX são cruzados entre a placa e o adaptador, e só o GND é comum: não ligue o 3V3 nem o 5V do adaptador na placa. Deixe o USB-C da Black Pill desconectado enquanto o ST-Link estiver alimentando a placa.
+Serial: **921.600 baud, 8N1** (padrão desde 03/11, decisão "Recepção pela serial a 921.600 bit/s como padrão, com contador de voltas do anel"; até então, 115.200). Os 921.600 foram testados com um adaptador só, no Linux: **teste o seu adaptador a 921.600 antes da rodada** (`enviar_segmento.py --todos --erros`); voltar a 115.200 exige mudar o `.ioc` e gravar o firmware de novo, o `--baud` do script não basta. TX e RX são cruzados entre a placa e o adaptador, e só o GND é comum: não ligue o 3V3 nem o 5V do adaptador na placa. Deixe o USB-C da Black Pill desconectado enquanto o ST-Link estiver alimentando a placa.
 
 O diagrama de circuito está em [`hardware/frente1-circuito/`](hardware/frente1-circuito/) (projeto do KiCad, com o símbolo da Black Pill na biblioteca `frente1.kicad_sym` e o esquema exportado em SVG).
 
@@ -820,7 +820,7 @@ $ERR,1,9,29,truncado*52                        o anel do DMA estourou no meio do
 
 - **`$SEG` de origem `S`:** os mesmos campos do de origem `C`. Os `ciclos` somam só o processamento (os quadros do MFCC, o resumo e a LDA), sem a espera pelos bytes.
 - **`$ERR,1,<grupo>,<id>,<motivo>*HH`:** os motivos são `versao`, `formato`, `tamanho`, `crc` e `truncado`. O `magica`, previsto em 29/10, não é mais emitido (30/10): com a busca pela mágica, um quadro com a mágica corrompida é ignorado inteiro, a placa não responde, e o PC reenvia pelo timeout dele. Um erro de recepção não é resultado de segmento: não gasta o `n` do `$SEG` e não entra na contagem do painel. Se o cabeçalho chegou, grupo e id repetem o que veio nele (mesmo que outro campo esteja errado); se o quadro truncou antes, os dois vão vazios. O erro de conta (`disparou` = 4, decisão F) continua no `$SEG`, como antes.
-- **As linhas `ref` e `rx`:** a placa manda, ao entrar no modo, o escore de cada segmento dos clipes da flash pela mesma conta da demonstração (`mfcc_segmento` e `lda_escore`), em hexadecimal; e, antes de cada `$SEG`, a linha `rx`, com o escore do segmento recebido em hexadecimal (o `$SEG` só tem 3 casas). Mandar do PC um segmento dos clipes e comparar os dois hexadecimais é o teste bit a bit do card. A `rx` traz também o tempo de recepção (`ms`, da mágica ao último byte), os bytes ignorados antes da mágica, os que vieram a mais e os erros de linha da UART; desde 04/11, no fim da linha (regra 6), as voltas do anel no pedido (`voltas`, 12 num quadro inteiro: 25.618 B em 2.048) e os estouros do anel no pedido (`estouros`, tem de ser 0), com `anel=estourado` fechando a linha quando houve algum ("Voltas do anel", abaixo).
+- **As linhas `ref` e `rx`:** a placa manda, ao entrar no modo, o escore de cada segmento dos clipes da flash pela mesma conta da demonstração (`mfcc_segmento` e `lda_escore`), em hexadecimal; e, antes de cada `$SEG`, a linha `rx`, com o escore do segmento recebido em hexadecimal (o `$SEG` só tem 3 casas). Mandar do PC um segmento dos clipes e comparar os dois hexadecimais é o teste bit a bit do card. A `rx` traz também o tempo de recepção (`ms`, da mágica ao último byte), os bytes ignorados antes da mágica, os que vieram a mais e os erros de linha da UART; desde 04/11, no fim da linha (regra 6), as voltas do anel no pedido (`voltas`, só informativo: o total de bytes lidos no pedido dividido por 2.048, que dá 12 num quadro inteiro sozinho, 25 com dois quadros no mesmo pedido, 6 no truncado da metade, e pode dar 13 com bytes ignorados antes da mágica; o PC não reprova por ele) e as detecções de estouro do anel no pedido (`estouros`, tem de ser 0; é um alarme conservador, não uma contagem exata), com `anel=estourado` fechando a linha quando houve alguma ("Voltas do anel", abaixo).
 - O `ler_pacotes.py` só lê as linhas que começam com `$CAB,` ou `$SEG,`, então `$PED` e `$ERR` passam pela versão 1 do pacote sem mudança. Só a origem `S` pede o leitor atualizado, como foi com a `D`.
 
 ### Erros e silêncio
@@ -844,6 +844,15 @@ O `recepcao_serial.c` define o `HAL_UART_RxHalfCpltCallback()` e o `HAL_UART_RxC
 - **Mais de um anel de diferença** (`escrito - lidos > 2.048`): os bytes não lidos já foram sobrescritos. Nada é entregue ao parser, a leitura pula para onde o DMA está, o estouro é contado, e o parser sabe da perda (`recepcao_perder()`): o quadro vira `truncado` na hora, inclusive esperando a mágica (com grupo e id vazios no `$ERR`, como já previsto). Sem isso, um estouro que comesse a mágica deixaria a placa calada, e o motivo não apareceria.
 - **Exatamente um anel de diferença** (o anel cheio, com a posição de escrita igual à de leitura): antes, o laço não lia nada e perdia o anel inteiro na volta seguinte; agora lê os 2.048 bytes.
 - **Byte sobrescrito enquanto era lido:** a conta é refeita depois da leitura; se o DMA passou do byte mais antigo lido, o estouro é contado. Essa conferência é conservadora, então ela só conta: quem decide o quadro é o CRC.
+
+**O campo `estouros` é um alarme conservador, não uma contagem exata de estouros** (apontado pela Júlia na revisão do PR #12). Ele conta detecções, e duas coisas o fazem passar do número real:
+
+- um estouro só pode ser detectado duas vezes, primeiro pela conferência depois da leitura e de novo pela conta antes da leitura seguinte. No emulador com `--travar-ms 50`, o mesmo estouro deu `estouros=2` numa rodada com os 10 segmentos e `estouros=1` numa rodada só do segmento 29;
+- a conferência depois da leitura também dispara quando o DMA sobrescreve um byte que já tinha sido copiado para o parser, e aí marca estouro num quadro que passou no CRC.
+
+Em operação normal, a conferência depois da leitura não dispara: o laço lê o anel em pedaços pequenos, porque cada quadro do MFCC (~0,6 ms) é processado bem mais rápido do que os bytes chegam (revisão da Amanda no PR #12). Um falso alarme só aparece perto de um estouro de verdade.
+
+O que vale é o zero: `estouros=0` garante que nenhum byte foi sobrescrito antes de ser lido. Acima de zero, houve risco, e o segmento é reenviado (regra 7 de "Regras do PC na rodada"); no pior caso, um quadro certo é reenviado. O `voltas` não é critério.
 
 O custo, no build Debug padrão: +496 B de flash e +80 B de RAM pelo relatório do linker (449.740 → 450.236 B e 34.912 → 34.992 B). Pelo `tools/orcamento_memoria.py`, +464 B de flash e os 80 B de RAM ficam na recepção (o contador, as duas interrupções, o `recepcao_perder()` e os campos novos da `rx`; na RAM, o buffer da linha, que passou de 192 para 256 B para a `rx` caber com todos os campos no máximo, e os contadores).
 
@@ -898,7 +907,7 @@ python3 tests/host/recepcao/enviar_segmento.py --autoteste                      
 python3 tests/host/recepcao/enviar_segmento.py --porta /dev/ttyUSB0 --todos --erros --seg 88   # com a placa
 ```
 
-Desde 04/11, o script usa 921.600 bit/s por padrão (`--baud 115200` para um firmware antigo) e também reprova uma linha `rx` com `estouros` acima de 0, mesmo que a resposta esteja certa.
+Desde 04/11, o script usa 921.600 bit/s por padrão (`--baud 115200` para um firmware antigo) e também reprova uma linha `rx` com `estouros` acima de 0, mesmo que a resposta esteja certa (o campo é um alarme conservador: no pior caso, um reenvio).
 
 O `--erros` manda, na mesma sessão, os seis quadros estragados (`crc`, `versao`, `formato`, `tamanho`, `truncado` e `magica`) e o quadro certo no fim, para mostrar que a placa se recuperou. A placa fica no modo até o reset, e as linhas `ref` só saem ao entrar nele. Ao abrir a porta, o script escuta 3 s: se a placa fala (a demonstração), ele pede o modo; se está calada (já no modo, de uma execução anterior), manda direto, sem a conferência bit a bit. Se chegar uma linha da demonstração no meio dos quadros (a placa reiniciou, por exemplo por um novo "Run and Debug" no VS Code), o script para e avisa, em vez de tomar o `$SEG` da demonstração por resposta.
 
@@ -907,11 +916,12 @@ O `--erros` manda, na mesma sessão, os seis quadros estragados (`crc`, `versao`
 O que o script da rodada dos 295 do Jung e dos 40 do HUSTmotor segue (revisão da Amanda no PR). O `enviar_segmento.py` é só o script do teste do firmware e não implementa todas.
 
 1. **Modelo.** Antes do primeiro quadro, o PC confere o `modelo=` e o `json=` da linha `recepcao inicio` (os mesmos do `$CAB`) contra o modelo do Python. Se não baterem, não manda nada.
-2. **Tentativas.** No máximo 3 por segmento, contando `$ERR` e timeout (o tempo de transmissão mais 2 s sem resposta). Depois da terceira, o segmento entra no relatório como "não processado", com contagem.
-3. **Duplicatas.** Se a resposta se perde na linha, o reenvio por timeout faz a placa processar o mesmo quadro de novo, com dois `$SEG` para o mesmo id e `n` diferentes. Vale o primeiro; a duplicata é contada no relatório (e o escore tem de ser o mesmo, bit a bit).
+2. **Tentativas.** No máximo 3 por segmento, contando `$ERR` (inclusive o `$ERR` sem grupo e id, que é o erro do quadro que acabou de ser mandado quando a mágica se perdeu), timeout (o tempo de transmissão mais 2 s sem resposta) e `$SEG` com `estouros` > 0 (regra 7). Depois da terceira, o segmento entra no relatório como "não processado", com contagem.
+3. **Duplicatas.** Se a resposta se perde na linha, o reenvio por timeout faz a placa processar o mesmo quadro de novo, com dois `$SEG` para o mesmo id e `n` diferentes. Vale o primeiro com `estouros=0` na `rx`; a duplicata é contada no relatório (e o escore tem de ser o mesmo, bit a bit).
 4. **Grupos e ids.** Grupo 1 = Jung, com o id do segmento no conjunto (`vt_segmento`); grupo 2 = HUSTmotor, com o índice do segmento na lista `segmentos` do `data/processed/hustmotor/divisao_rotacao.json` (versionado no repositório do Python), **contado a partir de 0**, como o índice de uma lista em Python: os 40 segmentos vão de 0 (`h_5hz_a1`) a 39 (`bf_30hz_a5`). Os ids do HUST são texto e o quadro só leva `uint32`; o relatório da rodada guarda os dois, o índice e o id em texto; grupo 9 = clipes da flash, com o id do segmento (29, 30, 88, ...), que é o que o `enviar_segmento.py` usa.
 5. **Reinício.** Se aparecer uma linha da demonstração (`demo`, `ponta`, um `$SEG` de origem `C` ou `D`) ou um `hello` no meio da rodada, a placa reiniciou: o PC pede o modo de novo (`RECEBER`) e retoma do segmento pendente.
 6. **A linha `rx` faz parte do protocolo.** O `$SEG` só tem 3 casas, então o script compara o escore pelo `escore_hex` da `rx`. Os campos `grupo`, `id`, `ms` e `escore_hex` da `rx` de um segmento, e `erro`, `grupo` e `id` da `rx` de erro, não mudam sem aviso, como os campos do `$SEG`; campos novos só entram no fim da linha.
+7. **Estouro do anel.** Um `$SEG` cuja `rx` tenha `estouros` > 0 é descartado e reenviado, e conta como tentativa (regra 2), mesmo com o escore certo: o campo é um alarme conservador ("Voltas do anel"). O `voltas` é só informativo e não entra na decisão.
 
 ### Resultado na placa
 

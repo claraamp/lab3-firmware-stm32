@@ -42,7 +42,7 @@ static uint32_t pos_lida = 0u;   /* proximo byte a ler do anel */
  * A 921.600 bit/s, o anel de 2 KB da cerca de 22 ms de folga ao laco. */
 static volatile uint32_t meias = 0u;   /* metades do anel cheias (nas interrupcoes) */
 static uint32_t lidos = 0u;            /* bytes lidos do anel desde o armar() */
-static uint32_t n_estouros = 0u;       /* desde o boot, como o n_erros_uart */
+static uint32_t n_estouros = 0u;       /* deteccoes desde o boot, como o n_erros_uart */
 static uint32_t estouros_no_pedido = 0u;
 
 /* A HAL aborta a recepcao por DMA em qualquer erro de linha e chama o callback. */
@@ -245,7 +245,10 @@ static recepcao_estado_t consumir(void)
     return e;
 }
 
-/* Voltas do anel e estouros do pedido atual, para as linhas rx. Entram no fim das
+/* Voltas do anel e estouros do pedido atual, para as linhas rx. O estouros e um
+ * alarme conservador: conta deteccoes (um estouro pode ser visto duas vezes, depois
+ * da leitura e antes da seguinte), e a conferencia depois da leitura pode marcar um
+ * quadro que passou no CRC. So o zero e garantia. Entram no fim das
  * linhas (regra 6 do README: campo novo da rx so no fim), e com estouro o texto
  * " anel=estourado" fecha a linha. */
 static uint32_t voltas(void)
