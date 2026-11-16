@@ -158,6 +158,28 @@ if(ORCAMENTO)
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_ORCAMENTO)
 endif()
 
+# Build de medida de tempo e pilha (Core/Src/medida.c; card "Medir tempo de execucao
+# e ocupacao de memoria da cadeia embarcada", 11/2026): pinta a pilha no boot e, no
+# modo de recepcao, manda uma linha "med" por segmento com a espera do PC, o tempo
+# de linha e as lacunas, o trabalho da CPU com os bytes, a resposta e a pilha usada
+# (ver recepcao_serial.c). As linhas rx e $SEG nao mudam.
+# DESLIGADO por padrao: a flash e a RAM do card sao as do build padrao, sem isto.
+# Para medir: cmake --preset Debug -DMEDIDA=ON (volte com -DMEDIDA=OFF).
+option(MEDIDA "Build de medida: linha med no modo de recepcao e pilha pintada" OFF)
+if(MEDIDA)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE Core/Src/medida.c)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE FIRMWARE_MEDIDA)
+endif()
+
+# Grafo de chamadas com o quadro de pilha de cada funcao (um .ci por arquivo, ao
+# lado do .su do -fstack-usage), para o tools/pilha_estatica.py somar o pior caminho.
+# Sempre ligado no gcc: nao muda o codigo gerado (mesma flash e RAM, byte a byte).
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE -fcallgraph-info=su)
+    target_compile_options(CMSISDSP PRIVATE -fcallgraph-info=su)
+    target_compile_options(STM32_Drivers PRIVATE -fcallgraph-info=su)
+endif()
+
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths

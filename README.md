@@ -108,7 +108,8 @@ Core/                        código da aplicação (main.c e periféricos gerad
                              decimação e à recepção pela serial;
                              recepcao.c/.h, o parser do quadro da recepção pela serial;
                              recepcao_serial.c/.h, o modo de recepção na placa (DMA e respostas);
-                             texto_fixo.c/.h, float em texto sem o %f)
+                             texto_fixo.c/.h, float em texto sem o %f;
+                             medida.c/.h, a pilha pintada do build de medida, -DMEDIDA=ON)
 tests/host/                  testes no PC da parte do marco e do pacote que não usa a HAL,
                              testes das tabelas (test_mel_bordas.c, test_log_dct.c), do
                              CRC-32 comum (test_crc32.c) e do parser da recepção (test_recepcao.c)
@@ -120,7 +121,8 @@ tests/host/recepcao/         script mínimo do PC para a recepção pela serial 
 tests/host/decimacao/        a decimação em C contra o Python em float64: o recorte (comparar_decimacao.py)
                              e as gravações inteiras (decimar_gravacao.c e tolerancias_gravacoes.py)
 docs/validacao-blocos.md     tabela de erros por bloco (PC, 295 segmentos) e o teste na placa
-tools/                       orcamento_memoria.py: flash e RAM por parte, lidas do .map
+tools/                       orcamento_memoria.py: flash e RAM por parte, lidas do .map;
+                             pilha_estatica.py: pior caso da pilha pelo grafo de chamadas (.ci)
 Drivers/                     HAL do STM32F4, CMSIS e CMSIS-DSP (código-fonte)
 cmake/                       toolchain e arquivos gerados pelo CubeMX
 CMakeLists.txt               build do projeto e da biblioteca CMSISDSP
@@ -948,6 +950,44 @@ Captura de 30/10 (build Debug padrão, 115.200 bit/s), versionada em [`docs/rece
 
 Sobram 72,8 KiB de flash e 93,9 KiB de RAM. Com o contador de voltas do anel (04/11): +496 B de flash e +80 B de RAM (450.236 B e 34.992 B); sobram 72,3 KiB de flash e 93,8 KiB de RAM.
 
+## Tempo e pilha: build de medida (novembro)
+
+Card "Medir tempo de execução e ocupação de memória da cadeia embarcada" (Fase 3). Quase tudo já estava medido no 2º parcial (ciclos por bloco, decimação, ponta a ponta e memória); o card remede o que mudou depois (a recepção pela serial e os 921.600 bit/s), separa a E/S do processamento e fecha o critério de tempo real nos dois modos. Três medidas:
+
+1. **Flash e RAM:** no build padrão (Debug), pelo `tools/orcamento_memoria.py`, como antes.
+2. **Pilha estática:** o CMake liga o `-fcallgraph-info=su` em todo build com o gcc (não muda o código gerado: mesma flash e RAM, byte a byte), e o `tools/pilha_estatica.py` soma o pior caminho pelo grafo de chamadas, a partir do `main` e de cada interrupção, contra a reserva de 4 KB do linker. As funções da newlib (o `snprintf`, por exemplo), que não têm `.ci`, saem da desmontagem do `.elf` (prólogo e chamadas). As interrupções entram pelos níveis do firmware: o SysTick (nível 15) pode ser interrompido pelo USART1 ou pelo DMA2 Stream2 (nível 0), cada entrada com 108 B de quadro de exceção (o estendido da FPU e o alinhamento).
+
+   ```bash
+   cmake --preset Debug -DMEDIDA=OFF && cmake --build --preset Debug
+   python3 tools/pilha_estatica.py build/Debug
+   ```
+
+3. **Tempo da recepção e pilha medida:** no build de medida (`-DMEDIDA=ON`, desligado por padrão). O `medida.c` pinta 16 KB do topo da RAM no começo do `main()`, e o modo de recepção manda, depois do `$CAB` e antes do primeiro `$PED`, uma linha `med inicio` (baud real pelo BRR, ciclos por byte, pilha usada no boot) e, depois de cada `$SEG`, uma linha `med`. As linhas `rx` e `$SEG` não mudam, e os scripts do PC ignoram as `med`:
+
+   ```
+   med inicio baud_real=925925 ciclos_por_byte=1080 pilha_boot=... pilha_pintada=16384 pilha_reserva=4096
+   med grupo=1 id=0 espera_us=... linha_us=... lacunas_us=... lacuna_max_us=... consumir=... consumir_max_us=... resposta_us=... pilha=...
+   ```
+
+   | Campo | O que é |
+   |---|---|
+   | `espera_us` | do fim do `$PED` ao primeiro byte do quadro: o PC lendo o pedido e mandando |
+   | `linha_us` | do primeiro ao último byte, pelo DWT (o `ms` da `rx` mede o mesmo com resolução de 1 ms) |
+   | `lacunas_us` | soma, entre leituras seguidas com bytes novos, do tempo que passou do tempo de linha desses bytes (n × 10 bits no baud real): a linha parada entre um pacote USB e outro |
+   | `lacuna_max_us` | a maior dessas paradas |
+   | `consumir` | ciclos das chamadas ao `consumir()` que acharam bytes: todo o trabalho da CPU com o quadro (cópia do anel, CRC, montagem das amostras e quadros do MFCC). Menos o `ciclos` da `rx` (MFCC, resumo e LDA), dá o custo da recepção byte a byte (a LDA, ~240 ciclos, fica dentro do erro) |
+   | `consumir_max_us` | a chamada mais longa ao `consumir()`: o maior tempo sem ler o anel, contra os ~22 ms em que ele enche |
+   | `resposta_us` | do quadro completo ao fim do envio do `$SEG`: a LDA, a formatação e o `HAL_UART_Transmit` bloqueante da `rx` e do `$SEG` (sem a própria `med`) |
+   | `pilha` | marca d'água da pilha desde o boot, em bytes contados do topo da RAM |
+
+   A rodada é a dos 295 do Jung e dos 40 do HUSTmotor, pelo `matriz_serial_placa.py` do repositório do Python, e a análise é o `run_tempo_memoria.py` de lá (resumo, tabelas da seção 3.5 e linha do registry). O build de medida custa +836 B de flash e +40 B de RAM (gcc 13.2.1, Debug); a flash e a RAM do card são as do build padrão.
+
+   ```bash
+   cmake --preset Debug -DMEDIDA=ON && cmake --build --preset Debug    # gravar
+   # ... rodada e análise no repositório do Python ...
+   cmake --preset Debug -DMEDIDA=OFF && cmake --build --preset Debug   # voltar ao firmware normal e gravar de novo
+   ```
+
 ## Validação bloco a bloco
 
 A validação independente da cadeia em C (card "Validar cada bloco da cadeia em C contra a referência em Python") está em [`docs/validacao-blocos.md`](docs/validacao-blocos.md): a tabela de erros de cada bloco nos 295 segmentos da partição, nos dois modos do A4, o escore final contra o `escores_referencia.csv` e o teste do segmento completo na placa (opção `VALIDACAO_PLACA` do CMake, desligada por padrão). O C só grava as saídas (`tests/host/validacao/exportar_saidas_c.c`); a comparação é do `tests/host/validacao/validar_blocos.py`, com o `dsp.erro_estagio` do repositório do Python. Como reproduzir está no próprio documento.
@@ -1028,4 +1068,5 @@ Resultado em 20/10 (build Debug com gcc 13.2.1, branch da cadeia completa, depoi
 - **20/10:** decimação embarcada (bloco 0) sobre o recorte de 51,2 kHz, passada pela cadeia quadro a quadro e comparada com o Python, com os ciclos pelo DWT. Na revisão do PR #9: `ARM_MATH_LOOPUNROLL` na CMSIS-DSP, a conta em LSB com o `vcvtr` e as tolerâncias medidas nos 295 segmentos.
 - **22/10:** primeira inferência de ponta a ponta no laço normal: o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, a cada volta da demonstração, com o LED da decisão e o `$SEG` de origem `D`.
 - **29 a 31/10:** recepção de segmentos pela serial (seção "Recepção de segmentos pela serial"): o formato do quadro (29/10), o parser em fluxo, o modo de recepção, o script mínimo, o emulador no PC e o teste na placa a 115.200 bit/s (30/10) e o teste a 921.600 bit/s (31/10), para rodar os 295 segmentos do Jung e os 40 do HUSTmotor na placa.
-- **Depois:** caracterização completa de tempo e memória (novembro), o detector de novidade se for adotado (03/11) e o painel no computador (23/11).
+- **Novembro:** caracterização de tempo e memória (seção "Tempo e pilha: build de medida"): pilha estática pelo grafo de chamadas, build de medida com a linha `med` e a rodada dos 295 + 40 com a E/S separada do processamento.
+- **Depois:** o painel no computador (20/11) e a sinalização por LED.

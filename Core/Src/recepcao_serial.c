@@ -49,6 +49,82 @@ static uint32_t estouros_no_pedido = 0u;
 static volatile uint8_t erro_uart = 0u;
 static uint32_t n_erros_uart = 0u;
 
+#ifdef FIRMWARE_MEDIDA
+#include "medida.h"
+
+/* Build de medida (-DMEDIDA=ON; card de tempo e memoria, 11/2026). Separa, em cada
+ * pedido, o tempo da linha (os bytes chegando), o trabalho da CPU com eles e a
+ * resposta, e manda tudo numa linha "med" depois do $SEG. O firmware normal nao
+ * tem nada disto: as linhas rx e $SEG ficam iguais, e os scripts do PC ignoram a
+ * med como qualquer linha que nao conhecem.
+ *
+ * Tudo pelo DWT (100 MHz; 1 ciclo = 10 ns), lido no laco do modo:
+ * - espera: do fim do $PED ao primeiro byte do quadro (o PC lendo o $PED e
+ *   mandando o quadro);
+ * - linha: do primeiro ao ultimo byte do quadro, como o campo ms da rx, mas com
+ *   resolucao de 10 ns;
+ * - lacunas: a soma, entre leituras seguidas com bytes novos, do que passou do
+ *   tempo de linha dos bytes que chegaram (n x 10 bits / baud real). E o tempo em
+ *   que a linha ficou parada (o PC e o adaptador entre um pacote USB e outro);
+ *   linha - lacunas e o tempo de linha "cheia";
+ * - consumir: os ciclos das chamadas ao consumir() que acharam bytes, ou seja,
+ *   todo o trabalho da CPU com o quadro: a copia do anel, o CRC, a montagem das
+ *   amostras e os quadros do MFCC. O campo ciclos da rx tem so o MFCC, o resumo e
+ *   a LDA; a diferenca (sem a LDA) e o custo da recepcao byte a byte;
+ * - consumir_max: a chamada mais longa ao consumir(), o maior tempo em que o laco
+ *   ficou sem ler o anel. Tem que ficar bem abaixo dos ~22 ms em que o anel de
+ *   2 KB enche a 921.600 bit/s;
+ * - resposta: do quadro completo ao fim do envio do $SEG (LDA, formatacao e o
+ *   HAL_UART_Transmit bloqueante da rx e do $SEG); sem a propria linha med;
+ * - pilha: a marca d'agua desde o boot (medida.h). */
+static struct {
+    uint32_t t_ped;          /* DWT no fim do $PED */
+    uint32_t t_primeiro;     /* DWT da primeira leitura com bytes */
+    uint32_t t_ultimo;       /* DWT da ultima leitura com bytes */
+    uint32_t espera;
+    uint32_t lacunas;
+    uint32_t lacuna_max;
+    uint32_t consumir;
+    uint32_t consumir_max;
+    uint32_t ciclos_por_byte;   /* 10 bits no baud real (BRR), em ciclos */
+    uint8_t teve_byte;
+} med;
+
+static void medida_pedido(uint32_t agora)
+{
+    const uint32_t ciclos_por_byte = med.ciclos_por_byte;
+    memset(&med, 0, sizeof med);
+    med.ciclos_por_byte = ciclos_por_byte;
+    med.t_ped = agora;
+}
+
+/* Uma leitura que achou n bytes novos, no instante t (antes de entregar ao parser). */
+static void medida_chegada(uint32_t t, uint32_t n)
+{
+    if (!med.teve_byte) {
+        med.teve_byte = 1u;
+        med.espera = t - med.t_ped;
+        med.t_primeiro = t;
+    } else {
+        const uint32_t dt = t - med.t_ultimo;
+        const uint32_t esperado = n * med.ciclos_por_byte;
+        if (dt > esperado) {
+            const uint32_t l = dt - esperado;
+            med.lacunas += l;
+            if (l > med.lacuna_max) {
+                med.lacuna_max = l;
+            }
+        }
+    }
+    med.t_ultimo = t;
+}
+
+static uint32_t us(uint32_t ciclos)
+{
+    return ciclos / (SystemCoreClock / 1000000u);
+}
+#endif
+
 static recepcao_t rx;            /* estatico, e nao na pilha (856 B) */
 static char linha[256];   /* a linha rx com todos os campos no maximo passa de 192 */
 _Static_assert(sizeof linha >= PACOTE_TAM_MAX, "o $SEG tem que caber no buffer");
@@ -226,6 +302,10 @@ static recepcao_estado_t consumir(void)
         return e;
     }
     if (n > 0u) {
+#ifdef FIRMWARE_MEDIDA
+        const uint32_t t0 = ler_dwt();
+        medida_chegada(t0, n);
+#endif
         const uint32_t agora = HAL_GetTick();
         const uint32_t ate_o_fim = tam_anel - pos_lida;
         if (n <= ate_o_fim) {
@@ -241,6 +321,13 @@ static recepcao_estado_t consumir(void)
         }
         lidos += n;
         pos_lida = lidos % tam_anel;
+#ifdef FIRMWARE_MEDIDA
+        const uint32_t dc = ler_dwt() - t0;
+        med.consumir += dc;
+        if (dc > med.consumir_max) {
+            med.consumir_max = dc;
+        }
+#endif
     }
     return e;
 }
@@ -335,6 +422,21 @@ void recepcao_serial_executar(int ok)
     enviar_referencias();
     enviar_linha(pacote_cabecalho(linha, sizeof linha, CLIPES_MODELO_ID, CLIPES_JSON_SHA256_12,
                                   (unsigned)LDA_N_FEATURES, (unsigned)(SystemCoreClock / 1000000u)));
+#ifdef FIRMWARE_MEDIDA
+    {
+        /* O baud real sai do BRR: com sobreamostragem de 16, baud = PCLK2 / BRR
+         * (100 MHz / 0x6C = 925.926 bit/s para os 921.600 pedidos). Um byte na
+         * linha sao 10 bits (8N1). A pilha aqui e a do boot e da demonstracao. */
+        const uint32_t pclk2 = HAL_RCC_GetPCLK2Freq();
+        const uint32_t brr = huart1.Instance->BRR;
+        med.ciclos_por_byte = (uint32_t)(((uint64_t)SystemCoreClock * 10u * brr) / pclk2);
+        enviar_linha(snprintf(linha, sizeof linha,
+                              "med inicio baud_real=%lu ciclos_por_byte=%lu pilha_boot=%lu pilha_pintada=%u "
+                              "pilha_reserva=4096\r\n",
+                              (unsigned long)(pclk2 / brr), (unsigned long)med.ciclos_por_byte,
+                              (unsigned long)medida_pilha_usada(), (unsigned)MEDIDA_PILHA_PINTADA));
+    }
+#endif
 
     uint32_t pedidos = 0u;
     for (;;) {
@@ -342,6 +444,9 @@ void recepcao_serial_executar(int ok)
         recepcao_iniciar(&rx, ler_dwt, HAL_GetTick());
         estouros_no_pedido = n_estouros;
         enviar_linha(pacote_pedido(linha, sizeof linha, ++pedidos));
+#ifdef FIRMWARE_MEDIDA
+        medida_pedido(ler_dwt());
+#endif
 
         recepcao_estado_t e;
         for (;;) {
@@ -361,8 +466,23 @@ void recepcao_serial_executar(int ok)
         }
         HAL_UART_AbortReceive(&huart1);   /* nada chega entre a resposta e o $PED */
 
+#ifdef FIRMWARE_MEDIDA
+        const uint32_t t_resp = ler_dwt();
+#endif
         if (e == RECEPCAO_COMPLETO) {
             responder_segmento();
+#ifdef FIRMWARE_MEDIDA
+            const uint32_t resposta = ler_dwt() - t_resp;
+            enviar_linha(snprintf(linha, sizeof linha,
+                                  "med grupo=%u id=%lu espera_us=%lu linha_us=%lu lacunas_us=%lu "
+                                  "lacuna_max_us=%lu consumir=%lu consumir_max_us=%lu resposta_us=%lu "
+                                  "pilha=%lu\r\n",
+                                  (unsigned)rx.grupo, (unsigned long)rx.id, (unsigned long)us(med.espera),
+                                  (unsigned long)us(med.t_ultimo - med.t_primeiro),
+                                  (unsigned long)us(med.lacunas), (unsigned long)us(med.lacuna_max),
+                                  (unsigned long)med.consumir, (unsigned long)us(med.consumir_max),
+                                  (unsigned long)us(resposta), (unsigned long)medida_pilha_usada()));
+#endif
         } else {
             responder_erro();
         }
