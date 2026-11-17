@@ -786,7 +786,7 @@ A 921.600 bit/s (o padrão desde 03/11; 925.926 reais com o APB2 a 100 MHz: a HA
 | 0 | 4 | mágica | `QSEG` (ASCII) |
 | 4 | 1 | versão do quadro | 1 |
 | 5 | 1 | formato | 1 = `int16` a 12,8 kHz (2 reservado para 51,2 kHz, ainda não aceito) |
-| 6 | 2 | grupo (`uint16`) | vai no campo `clipe` do `$SEG`: 1 = Jung, 2 = HUSTmotor, 9 = clipes da flash (ver "Regras do PC na rodada") |
+| 6 | 2 | grupo (`uint16`) | vai no campo `clipe` do `$SEG`: 1 = Jung, 2 = HUSTmotor, 3 e 4 = robustez ao ruído (branco e rosa), 9 = clipes da flash (ver "Regras do PC na rodada") |
 | 8 | 4 | id (`uint32`, até 2³¹ − 1) | vai no campo `segmento` do `$SEG` |
 | 12 | 2 | n_amostras (`uint16`) | 12800 |
 | 14 | 4 | CRC-32 (zlib) | sobre os bytes 4..13 e o corpo |
@@ -913,12 +913,12 @@ O `--erros` manda, na mesma sessão, os seis quadros estragados (`crc`, `versao`
 
 ### Regras do PC na rodada
 
-O que o script da rodada dos 295 do Jung e dos 40 do HUSTmotor segue (revisão da Amanda no PR). O `enviar_segmento.py` é só o script do teste do firmware e não implementa todas.
+O que o script de envio (`matriz_serial_placa.py`) segue nas rodadas do Jung e do HUSTmotor e na da robustez ao ruído, com `--lista` (revisão da Amanda no PR). O `enviar_segmento.py` é só o script do teste do firmware e não implementa todas.
 
 1. **Modelo.** Antes do primeiro quadro, o PC confere o `modelo=` e o `json=` da linha `recepcao inicio` (os mesmos do `$CAB`) contra o modelo do Python. Se não baterem, não manda nada.
 2. **Tentativas.** No máximo 3 por segmento, contando `$ERR` (inclusive o `$ERR` sem grupo e id, que é o erro do quadro que acabou de ser mandado quando a mágica se perdeu), timeout (o tempo de transmissão mais 2 s sem resposta) e `$SEG` com `estouros` > 0 (regra 7). Depois da terceira, o segmento entra no relatório como "não processado", com contagem.
 3. **Duplicatas.** Se a resposta se perde na linha, o reenvio por timeout faz a placa processar o mesmo quadro de novo, com dois `$SEG` para o mesmo id e `n` diferentes. Vale o primeiro com `estouros=0` na `rx`; a duplicata é contada no relatório (e o escore tem de ser o mesmo, bit a bit).
-4. **Grupos e ids.** Grupo 1 = Jung, com o id do segmento no conjunto (`vt_segmento`); grupo 2 = HUSTmotor, com o índice do segmento na lista `segmentos` do `data/processed/hustmotor/divisao_rotacao.json` (versionado no repositório do Python), **contado a partir de 0**, como o índice de uma lista em Python: os 40 segmentos vão de 0 (`h_5hz_a1`) a 39 (`bf_30hz_a5`). Os ids do HUST são texto e o quadro só leva `uint32`; o relatório da rodada guarda os dois, o índice e o id em texto; grupo 9 = clipes da flash, com o id do segmento (29, 30, 88, ...), que é o que o `enviar_segmento.py` usa.
+4. **Grupos e ids.** Grupo 1 = Jung, com o id do segmento no conjunto (`vt_segmento`); grupo 2 = HUSTmotor, com o índice do segmento na lista `segmentos` do `data/processed/hustmotor/divisao_rotacao.json` (versionado no repositório do Python), **contado a partir de 0**, como o índice de uma lista em Python: os 40 segmentos vão de 0 (`h_5hz_a1`) a 39 (`bf_30hz_a5`). Os ids do HUST são texto e o quadro só leva `uint32`; o relatório da rodada guarda os dois, o índice e o id em texto; grupo 3 = ruído branco e grupo 4 = ruído rosa (robustez ao ruído, `matriz_serial_placa.py --lista`), com o id do `referencias.csv`: SNR·1000 + id do segmento do Jung no `splits.json` e, nas sementes 1 a 9, + semente·100.000 (o firmware não valida o grupo); grupo 9 = clipes da flash, com o id do segmento (29, 30, 88, ...), que é o que o `enviar_segmento.py` usa.
 5. **Reinício.** Se aparecer uma linha da demonstração (`demo`, `ponta`, um `$SEG` de origem `C` ou `D`) ou um `hello` no meio da rodada, a placa reiniciou: o PC pede o modo de novo (`RECEBER`) e retoma do segmento pendente.
 6. **A linha `rx` faz parte do protocolo.** O `$SEG` só tem 3 casas, então o script compara o escore pelo `escore_hex` da `rx`. Os campos `grupo`, `id`, `ms` e `escore_hex` da `rx` de um segmento, e `erro`, `grupo` e `id` da `rx` de erro, não mudam sem aviso, como os campos do `$SEG`; campos novos só entram no fim da linha.
 7. **Estouro do anel.** Um `$SEG` cuja `rx` tenha `estouros` > 0 é descartado e reenviado, e conta como tentativa (regra 2), mesmo com o escore certo: o campo é um alarme conservador ("Voltas do anel"). O `voltas` é só informativo e não entra na decisão.
