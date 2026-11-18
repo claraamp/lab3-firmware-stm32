@@ -39,6 +39,9 @@
 #ifdef FIRMWARE_ORCAMENTO
 #include "orcamento.h"
 #endif
+#ifdef FIRMWARE_MEDIDA
+#include "medida.h"
+#endif
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -130,7 +133,11 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+#ifdef FIRMWARE_MEDIDA
+  /* Build de medida (-DMEDIDA=ON): pinta a pilha livre antes de tudo, para a linha
+   * med do modo de recepcao mostrar a pilha usada desde o boot. Ver medida.h. */
+  medida_pintar_pilha();
+#endif
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
