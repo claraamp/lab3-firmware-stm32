@@ -9,6 +9,7 @@
 
 extern uint32_t _estack;   /* topo da RAM (linker script) */
 extern uint32_t _end;      /* fim do .bss: o heap comeca aqui */
+extern uint32_t _Min_Stack_Size;   /* simbolo absoluto: o valor e o endereco */
 
 /* Margem abaixo da pilha atual que nao e pintada: o quadro desta funcao e o do
  * main() ja estao em uso, e o que fica acima do comeco da pintura conta como usado
@@ -28,6 +29,11 @@ void medida_pintar_pilha(void)
     while (p < fim) {
         *p++ = MEDIDA_PADRAO;
     }
+}
+
+uint32_t medida_pilha_reserva(void)
+{
+    return (uint32_t)(uintptr_t)&_Min_Stack_Size;
 }
 
 uint32_t medida_pilha_usada(void)

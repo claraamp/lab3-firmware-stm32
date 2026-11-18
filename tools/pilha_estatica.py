@@ -8,27 +8,35 @@ quadros a partir do main e de cada rotina de interrupcao. As funcoes sem .ci (a
 newlib nano: snprintf, logf, memcpy...) sao lidas da desmontagem do .elf: o quadro
 sai do prologo (push e sub sp) e as chamadas, dos bl/b.w para simbolos conhecidos.
 
-    cmake --preset Debug -DMEDIDA=ON
+    cmake --preset Debug -DMEDIDA=OFF
     cmake --build --preset Debug
     python3 tools/pilha_estatica.py build/Debug
 
-Na opcao MEDIDA, o CMakeLists.txt liga o -fcallgraph-info=su (nao muda o codigo
-gerado). Sem os .ci, o script avisa e para.
+O CMakeLists.txt liga o -fcallgraph-info=su em todo build com o gcc (nao muda o
+codigo gerado). Sem os .ci (outro compilador, ou build antigo), o script avisa e
+para.
 
 O que entra no pior caso:
 - o caminho mais fundo a partir do main (o boot e o laco, inclusive o modo de
   recepcao), com o caminho impresso funcao a funcao, e o mais fundo a partir do
-  recepcao_serial_executar, para a secao do card;
+  main que passa pelo recepcao_serial_executar (o modo de recepcao, com o quadro
+  do main, que continua na pilha enquanto ele roda);
 - as interrupcoes pelos niveis de prioridade do firmware: o SysTick (nivel 15)
   pode ser interrompido pelo USART1 ou pelo DMA2 Stream2 (nivel 0, que nao se
   interrompem). Cada entrada em interrupcao empilha o quadro estendido do
   Cortex-M4F (26 palavras, 104 B, com o contexto da FPU) e o alinhamento de 8 B
   (ate 4 B).
 
-Limites: chamadas por ponteiro (o rx.ler_ciclos, os callbacks da HAL chamados por
-ponteiro quando USE_HAL_UART_REGISTER_CALLBACKS=1) nao aparecem no grafo; o script
-lista as funcoes com quadro "dynamic" e as chamadas que nao resolveu. A pilha
-medida na placa (opcao MEDIDA, campo pilha= da linha rx) e a conferencia.
+Chamadas por ponteiro: o gcc as marca como __indirect_call, sem destino. As da HAL
+(callbacks do DMA e da UART) entram pela tabela INDIRETAS. As do nosso codigo sao
+os dois tipos de ponteiro passados como argumento: o envio pela serial
+(cadeia_enviar_fn: o enviar_uart estatico do cadeia_clipes.c e do decimacao.c) e a
+leitura do DWT (cadeia_ciclos_fn: os ler_dwt). Cada funcao nossa com chamada por
+ponteiro ganha, por seguranca, uma aresta para todos eles (ALVOS_DE_PONTEIRO): o
+pior caso pode sair maior que o real, nunca menor. O script lista as funcoes com
+quadro "dynamic" e as chamadas que nao resolveu. A pilha medida na placa (opcao
+MEDIDA, campos pilha_boot= da linha "med inicio" e pilha= das linhas "med") e a
+conferencia.
 
 So usa a biblioteca padrao do Python e o arm-none-eabi-objdump (do STM32CubeCLT).
 """
@@ -52,9 +60,11 @@ INDIRETAS = {
     # erro de linha com DMA: HAL_DMA_Abort_IT -> hdma->XferAbortCallback
     "HAL_UART_IRQHandler": ["UART_DMAAbortOnError"],
 }
-# As outras chamadas por ponteiro do nosso codigo sao a leitura do DWT passada como
-# argumento (ler_dwt, ler_ciclos: 0 B de pilha, uma leitura de registrador), e por
-# isso nao mudam o pior caso.
+# Ponteiros passados como argumento no nosso codigo (ver o docstring): toda funcao
+# nossa com __indirect_call ganha aresta para todos estes. Sufixo "arquivo.c:nome"
+# para os estaticos, que existem com o mesmo nome em mais de um arquivo; os ler_dwt
+# (um por arquivo, 0 B) entram todos.
+ALVOS_DE_PONTEIRO = ["cadeia_clipes.c:enviar_uart", "decimacao.c:enviar_uart", ":ler_dwt"]
 
 RE_NODE = re.compile(r'node: \{ title: "([^"]+)" label: "([^"]*)"')
 RE_EDGE = re.compile(r'edge: \{ sourcename: "([^"]+)" targetname: "([^"]+)"')
@@ -137,7 +147,8 @@ def ler_elf(elf: Path, objdump: str):
 def montar(pasta: Path, elf: Path, objdump: str):
     arquivos, quadro, tipo, chamadas = ler_ci(pasta)
     if not arquivos:
-        sys.exit(f"nenhum .ci em {pasta}: compile com -DMEDIDA=ON (liga o -fcallgraph-info=su)")
+        sys.exit(f"nenhum .ci em {pasta}: compile com o gcc pelo CMakeLists.txt atual, que liga "
+                 "o -fcallgraph-info=su (cmake --build --preset Debug --clean-first)")
     q_elf, c_elf = ler_elf(elf, objdump)
     # nome curto -> titulo do no (extern pelo nome; static so se o nome for unico)
     por_nome = {}
@@ -161,6 +172,14 @@ def montar(pasta: Path, elf: Path, objdump: str):
         t = resolver(origem)
         if t is not None:
             chamadas[t] = set(chamadas.get(t, set())) | set(destinos)
+            chamadas[t].discard("__indirect_call")
+
+    alvos = sorted(t for t in quadro for sufixo in ALVOS_DE_PONTEIRO
+                   if t.endswith("/" + sufixo if not sufixo.startswith(":") else sufixo))
+    for f, ds in chamadas.items():
+        if "__indirect_call" in ds and f not in origem_elf:
+            ds.discard("__indirect_call")
+            ds.update(alvos)
 
     grafo, sem_destino = {}, {}
     for f, ds in chamadas.items():
@@ -207,6 +226,33 @@ def pior_caminho(raiz, quadro, grafo):
     return total, caminho, recursivas
 
 
+def pior_caminho_por(raiz, alvo, quadro, grafo):
+    """O caminho mais fundo a partir da raiz que passa pelo alvo: o prefixo mais
+    fundo ate o alvo (sem ele) mais o pior caminho a partir dele."""
+    alcanca = {}
+
+    def chega(f, vistos=()):
+        if f == alvo:
+            return (0, [])
+        if f in alcanca:
+            return alcanca[f]
+        melhor = None
+        for g in grafo.get(f, []):
+            if g in vistos:
+                continue
+            c = chega(g, vistos + (f,))
+            if c is not None and (melhor is None or c[0] > melhor[0]):
+                melhor = c
+        alcanca[f] = None if melhor is None else (quadro.get(f, 0) + melhor[0], [f] + melhor[1])
+        return alcanca[f]
+
+    prefixo = chega(raiz)
+    if prefixo is None:
+        return None
+    resto, caminho, rec = pior_caminho(alvo, quadro, grafo)
+    return prefixo[0] + resto, prefixo[1] + caminho, rec
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("build", type=Path, help="pasta do build (ex.: build/Debug)")
@@ -223,12 +269,19 @@ def main() -> int:
         cands = por_nome.get(nome, [])
         return cands[0] if cands else None
 
-    def mostrar(rotulo, raiz):
+    def mostrar(rotulo, raiz, por=None):
         t = titulo(raiz)
-        if t is None:
-            print(f"{rotulo}: {raiz} nao encontrado")
+        if t is None or (por and titulo(por) is None):
+            print(f"{rotulo}: {raiz if t is None else por} nao encontrado")
             return 0, []
-        total, caminho, rec = pior_caminho(t, quadro, grafo)
+        if por:
+            achado = pior_caminho_por(t, titulo(por), quadro, grafo)
+            if achado is None:
+                print(f"{rotulo}: {por} nao e alcancado a partir de {raiz}")
+                return 0, []
+            total, caminho, rec = achado
+        else:
+            total, caminho, rec = pior_caminho(t, quadro, grafo)
         print(f"\n{rotulo}: {total} B")
         for f in caminho:
             marca = " (newlib, pelo .elf)" if f in origem_elf else ""
@@ -240,7 +293,8 @@ def main() -> int:
 
     print(f"Pilha pelo grafo de chamadas ({elf})")
     p_main, _ = mostrar("main (boot e laco)", "main")
-    p_rx, _ = mostrar("recepcao_serial_executar (modo de recepcao)", "recepcao_serial_executar")
+    p_rx, _ = mostrar("main pelo recepcao_serial_executar (modo de recepcao)", "main",
+                      por="recepcao_serial_executar")
     irq0 = {}
     for h in ("USART1_IRQHandler", "DMA2_Stream2_IRQHandler"):
         irq0[h], _ = mostrar(f"{h} (nivel 0)", h)

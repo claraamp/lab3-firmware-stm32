@@ -955,32 +955,33 @@ Sobram 72,8 KiB de flash e 93,9 KiB de RAM. Com o contador de voltas do anel (04
 Card "Medir tempo de execução e ocupação de memória da cadeia embarcada" (Fase 3). Quase tudo já estava medido no 2º parcial (ciclos por bloco, decimação, ponta a ponta e memória); o card remede o que mudou depois (a recepção pela serial e os 921.600 bit/s), separa a E/S do processamento e fecha o critério de tempo real nos dois modos. Três medidas:
 
 1. **Flash e RAM:** no build padrão (Debug), pelo `tools/orcamento_memoria.py`, como antes.
-2. **Pilha estática:** o CMake liga o `-fcallgraph-info=su` em todo build com o gcc (não muda o código gerado: mesma flash e RAM, byte a byte), e o `tools/pilha_estatica.py` soma o pior caminho pelo grafo de chamadas, a partir do `main` e de cada interrupção, contra a reserva de 4 KB do linker. As funções da newlib (o `snprintf`, por exemplo), que não têm `.ci`, saem da desmontagem do `.elf` (prólogo e chamadas). As interrupções entram pelos níveis do firmware: o SysTick (nível 15) pode ser interrompido pelo USART1 ou pelo DMA2 Stream2 (nível 0), cada entrada com 108 B de quadro de exceção (o estendido da FPU e o alinhamento).
+2. **Pilha estática:** o CMake liga o `-fcallgraph-info=su` em todo build com o gcc (não muda o código gerado: mesma flash e RAM, byte a byte), e o `tools/pilha_estatica.py` soma o pior caminho pelo grafo de chamadas, a partir do `main` e de cada interrupção, contra a reserva de 4 KB do linker. As funções da newlib (o `snprintf`, por exemplo), que não têm `.ci`, saem da desmontagem do `.elf` (prólogo e chamadas). As interrupções entram pelos níveis do firmware: o SysTick (nível 15) pode ser interrompido pelo USART1 ou pelo DMA2 Stream2 (nível 0), cada entrada com 108 B de quadro de exceção (o estendido da FPU e o alinhamento). O script também dá o pior caminho do modo de recepção, a partir do `main` (cujo quadro continua na pilha enquanto o `recepcao_serial_executar` roda). As chamadas por ponteiro do nosso código (o envio pela serial, `enviar_uart`, e a leitura do DWT, `ler_dwt`, passados como argumento) entram como arestas para todos os destinos possíveis, e as da HAL (callbacks do DMA e da UART), por uma tabela: o pior caso pode sair maior que o real, nunca menor.
 
    ```bash
    cmake --preset Debug -DMEDIDA=OFF && cmake --build --preset Debug
    python3 tools/pilha_estatica.py build/Debug
    ```
 
-3. **Tempo da recepção e pilha medida:** no build de medida (`-DMEDIDA=ON`, desligado por padrão). O `medida.c` pinta 16 KB do topo da RAM no começo do `main()`, e o modo de recepção manda, depois do `$CAB` e antes do primeiro `$PED`, uma linha `med inicio` (baud real pelo BRR, ciclos por byte, pilha usada no boot) e, depois de cada `$SEG`, uma linha `med`. As linhas `rx` e `$SEG` não mudam, e os scripts do PC ignoram as `med`:
+3. **Tempo da recepção e pilha medida:** no build de medida (`-DMEDIDA=ON`, desligado por padrão). O `medida.c` pinta 16 KB do topo da RAM no começo do `main()`, e o modo de recepção manda, depois do `$CAB` e antes do primeiro `$PED`, uma linha `med inicio` (baud real pelo BRR, ciclos por byte, pilha usada no boot, reserva do linker lida do `_Min_Stack_Size`), pinta a pilha de novo e, depois de cada `$SEG`, manda uma linha `med`. As linhas `rx` e `$SEG` não mudam, e os scripts do PC ignoram as `med`:
 
    ```
    med inicio baud_real=925925 ciclos_por_byte=1080 pilha_boot=... pilha_pintada=16384 pilha_reserva=4096
-   med grupo=1 id=0 espera_us=... linha_us=... lacunas_us=... lacuna_max_us=... consumir=... consumir_max_us=... resposta_us=... pilha=...
+   med grupo=1 id=0 espera_us=... linha_us=... lacunas_us=... lacuna_max_us=... consumir=... leituras=... consumir_max_us=... resposta_us=... pilha=...
    ```
 
    | Campo | O que é |
    |---|---|
    | `espera_us` | do fim do `$PED` ao primeiro byte do quadro: o PC lendo o pedido e mandando |
-   | `linha_us` | do primeiro ao último byte, pelo DWT (o `ms` da `rx` mede o mesmo com resolução de 1 ms) |
-   | `lacunas_us` | soma, entre leituras seguidas com bytes novos, do tempo que passou do tempo de linha desses bytes (n × 10 bits no baud real): a linha parada entre um pacote USB e outro |
+   | `linha_us` | do primeiro ao último byte (o `ms` da `rx` mede o mesmo com resolução de 1 ms). O DWT conta em 10 ns, mas o primeiro e o último byte só são vistos quando o laço lê o anel: a incerteza é de até um `consumir()`, ~0,6 ms |
+   | `lacunas_us` | soma, entre leituras seguidas com bytes novos, do tempo que passou do tempo de linha desses bytes (n × 10 bits no baud da placa, 925.926 bit/s): a linha parada entre um pacote USB e outro. Se o adaptador manda a 921.600 bit/s, ~1,3 ms por segmento são essa diferença de baud, e não linha parada |
    | `lacuna_max_us` | a maior dessas paradas |
    | `consumir` | ciclos das chamadas ao `consumir()` que acharam bytes: todo o trabalho da CPU com o quadro (cópia do anel, CRC, montagem das amostras e quadros do MFCC). Menos o `ciclos` da `rx` (MFCC, resumo e LDA), dá o custo da recepção byte a byte (a LDA, ~240 ciclos, fica dentro do erro) |
+   | `leituras` | quantas chamadas ao `consumir()` acharam bytes. Com a CPU livre, o laço lê o anel a cada um ou dois bytes, e o custo fixo de cada chamada entra no `consumir` |
    | `consumir_max_us` | a chamada mais longa ao `consumir()`: o maior tempo sem ler o anel, contra os ~22 ms em que ele enche |
    | `resposta_us` | do quadro completo ao fim do envio do `$SEG`: a LDA, a formatação e o `HAL_UART_Transmit` bloqueante da `rx` e do `$SEG` (sem a própria `med`) |
-   | `pilha` | marca d'água da pilha desde o boot, em bytes contados do topo da RAM |
+   | `pilha` | marca d'água da pilha só da recepção (repintada depois da `med inicio`), até aquele segmento, em bytes contados do topo da RAM; nunca menor que a profundidade do ponto da repintura mais 256 B de margem |
 
-   A rodada é a dos 295 do Jung e dos 40 do HUSTmotor, pelo `matriz_serial_placa.py` do repositório do Python, e a análise é o `run_tempo_memoria.py` de lá (resumo, tabelas da seção 3.5 e linha do registry). O build de medida custa +836 B de flash e +40 B de RAM (gcc 13.2.1, Debug); a flash e a RAM do card são as do build padrão.
+   A rodada é a dos 295 do Jung e dos 40 do HUSTmotor, pelo `matriz_serial_placa.py` do repositório do Python, e a análise é o `run_tempo_memoria.py` de lá (resumo, tabelas da seção 3.6 do relatório final e linha do registry). O build de medida custa +916 B de flash e +40 B de RAM (gcc 13.2.1, Debug); a flash e a RAM do card são as do build padrão.
 
    ```bash
    cmake --preset Debug -DMEDIDA=ON && cmake --build --preset Debug    # gravar

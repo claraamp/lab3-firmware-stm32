@@ -25,8 +25,15 @@
 #define MEDIDA_PILHA_PINTADA (16u * 1024u)
 #define MEDIDA_PADRAO 0xA5A5A5A5u
 
-/* Chamar uma vez, no comeco do main() (USER CODE BEGIN 1), antes de tudo. */
+/* Pinta a pilha livre abaixo do ponto atual. Chamada no comeco do main() (USER
+ * CODE BEGIN 1), antes de tudo, e de novo no modo de recepcao, depois da linha
+ * "med inicio": a partir dai a marca d'agua e so a da recepcao, sem o boot. A
+ * marca nunca fica abaixo da profundidade em que a pintura foi feita mais 256 B
+ * (a margem nao pintada). */
 void medida_pintar_pilha(void);
+
+/* Reserva minima de pilha do linker script (_Min_Stack_Size), em bytes. */
+uint32_t medida_pilha_reserva(void);
 
 /* Bytes de pilha usados desde o boot (marca d'agua), contados do topo da RAM.
  * MEDIDA_PILHA_PINTADA se a pintura inteira foi usada (a medida saturou). */

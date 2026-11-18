@@ -61,22 +61,30 @@ static uint32_t n_erros_uart = 0u;
  * Tudo pelo DWT (100 MHz; 1 ciclo = 10 ns), lido no laco do modo:
  * - espera: do fim do $PED ao primeiro byte do quadro (o PC lendo o $PED e
  *   mandando o quadro);
- * - linha: do primeiro ao ultimo byte do quadro, como o campo ms da rx, mas com
- *   resolucao de 10 ns;
+ * - linha: do primeiro ao ultimo byte do quadro, como o campo ms da rx. O DWT tem
+ *   resolucao de 10 ns, mas o primeiro e o ultimo byte so sao vistos quando o laco
+ *   le o anel, o que pode atrasar ate uma chamada ao consumir() (~0,6 ms);
  * - lacunas: a soma, entre leituras seguidas com bytes novos, do que passou do
- *   tempo de linha dos bytes que chegaram (n x 10 bits / baud real). E o tempo em
+ *   tempo de linha dos bytes que chegaram (n x 10 bits no baud da placa, 925.926
+ *   bit/s; se o adaptador manda a 921.600, ~1,3 ms por segmento das lacunas sao
+ *   essa diferenca de baud, e nao linha parada). E o tempo em
  *   que a linha ficou parada (o PC e o adaptador entre um pacote USB e outro);
  *   linha - lacunas e o tempo de linha "cheia";
  * - consumir: os ciclos das chamadas ao consumir() que acharam bytes, ou seja,
  *   todo o trabalho da CPU com o quadro: a copia do anel, o CRC, a montagem das
  *   amostras e os quadros do MFCC. O campo ciclos da rx tem so o MFCC, o resumo e
  *   a LDA; a diferenca (sem a LDA) e o custo da recepcao byte a byte;
+ * - leituras: quantas chamadas ao consumir() acharam bytes. bytes / leituras e
+ *   quantos bytes cada leitura pega: com a CPU livre, o laco le o anel a cada um
+ *   ou dois bytes, e o custo fixo de cada chamada entra no consumir;
  * - consumir_max: a chamada mais longa ao consumir(), o maior tempo em que o laco
  *   ficou sem ler o anel. Tem que ficar bem abaixo dos ~22 ms em que o anel de
  *   2 KB enche a 921.600 bit/s;
  * - resposta: do quadro completo ao fim do envio do $SEG (LDA, formatacao e o
  *   HAL_UART_Transmit bloqueante da rx e do $SEG); sem a propria linha med;
- * - pilha: a marca d'agua desde o boot (medida.h). */
+ * - pilha: a marca d'agua da recepcao. A pilha e pintada de novo logo depois da
+ *   linha "med inicio" (que traz a do boot, pilha_boot), entao cada med mostra so
+ *   a recepcao, ate aquele segmento (medida.h). */
 static struct {
     uint32_t t_ped;          /* DWT no fim do $PED */
     uint32_t t_primeiro;     /* DWT da primeira leitura com bytes */
@@ -86,6 +94,7 @@ static struct {
     uint32_t lacuna_max;
     uint32_t consumir;
     uint32_t consumir_max;
+    uint32_t leituras;       /* chamadas ao consumir() que acharam bytes */
     uint32_t ciclos_por_byte;   /* 10 bits no baud real (BRR), em ciclos */
     uint8_t teve_byte;
 } med;
@@ -324,6 +333,7 @@ static recepcao_estado_t consumir(void)
 #ifdef FIRMWARE_MEDIDA
         const uint32_t dc = ler_dwt() - t0;
         med.consumir += dc;
+        ++med.leituras;
         if (dc > med.consumir_max) {
             med.consumir_max = dc;
         }
@@ -432,9 +442,12 @@ void recepcao_serial_executar(int ok)
         med.ciclos_por_byte = (uint32_t)(((uint64_t)SystemCoreClock * 10u * brr) / pclk2);
         enviar_linha(snprintf(linha, sizeof linha,
                               "med inicio baud_real=%lu ciclos_por_byte=%lu pilha_boot=%lu pilha_pintada=%u "
-                              "pilha_reserva=4096\r\n",
+                              "pilha_reserva=%lu\r\n",
                               (unsigned long)(pclk2 / brr), (unsigned long)med.ciclos_por_byte,
-                              (unsigned long)medida_pilha_usada(), (unsigned)MEDIDA_PILHA_PINTADA));
+                              (unsigned long)medida_pilha_usada(), (unsigned)MEDIDA_PILHA_PINTADA,
+                              (unsigned long)medida_pilha_reserva()));
+        /* Daqui em diante, a marca d'agua das linhas med e so a da recepcao. */
+        medida_pintar_pilha();
     }
 #endif
 
@@ -475,12 +488,13 @@ void recepcao_serial_executar(int ok)
             const uint32_t resposta = ler_dwt() - t_resp;
             enviar_linha(snprintf(linha, sizeof linha,
                                   "med grupo=%u id=%lu espera_us=%lu linha_us=%lu lacunas_us=%lu "
-                                  "lacuna_max_us=%lu consumir=%lu consumir_max_us=%lu resposta_us=%lu "
-                                  "pilha=%lu\r\n",
+                                  "lacuna_max_us=%lu consumir=%lu leituras=%lu consumir_max_us=%lu "
+                                  "resposta_us=%lu pilha=%lu\r\n",
                                   (unsigned)rx.grupo, (unsigned long)rx.id, (unsigned long)us(med.espera),
                                   (unsigned long)us(med.t_ultimo - med.t_primeiro),
                                   (unsigned long)us(med.lacunas), (unsigned long)us(med.lacuna_max),
-                                  (unsigned long)med.consumir, (unsigned long)us(med.consumir_max),
+                                  (unsigned long)med.consumir, (unsigned long)med.leituras,
+                                  (unsigned long)us(med.consumir_max),
                                   (unsigned long)us(resposta), (unsigned long)medida_pilha_usada()));
 #endif
         } else {
