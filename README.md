@@ -32,7 +32,7 @@ Ao ligar, a placa:
    Um segmento passa quando a decisão é a do CSV e `dif` ≤ `tol`. A tolerância de cada segmento vem do gerador: é o limite do arredondamento da soma em float32, o mesmo do `06`, mais o arredondamento do escore de referência para float32. Os `ciclos` são os do `lda_escore()` com a chamada, medidos pelo DWT; o `marco_lda.c` é sempre compilado com `-O2`, inclusive no Debug, para o tempo ser o do firmware final.
 4. **roda a cadeia completa nos 10 segmentos dos clipes** (`cadeia_verificar()`, ~1,3 s): para cada um, o `mfcc_segmento()` e o `lda_escore()` do `int16` ao escore, conferido com o `escores_referencia.csv` pela tolerância encadeada do escore no A4 (1e-5 relativo), e os ciclos de cada bloco pelo DWT. Termina com o resumo, a mediana de cada bloco e `CADEIA OK` ou `CADEIA FALHOU`, e manda o `$CAB` de novo (seção "Cadeia completa na placa");
 5. **decima o recorte de 51,2 kHz** (`decimacao_verificar()`): confere a fase do `arm_fir_decimate_f32` por um impulso, decima o segmento 29 do clipe normal passando cada passo de quadro pela cadeia até o escore, compara a saída com o `int16` do Python e mede os ciclos. Termina com `DECIMACAO OK duracao=... ms` ou `DECIMACAO FALHOU` (seção "Decimação na placa");
-6. em laço, **demonstração nos LEDs com a cadeia**: cada volta começa pela **inferência de ponta a ponta** (o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, com uma linha `ponta ...` e o `$SEG` de origem `D`; seção "Primeira inferência de ponta a ponta") e segue pelos 10 segmentos dos clipes em ordem, cada um processado de novo na hora (`mfcc_segmento()` → `lda_escore()`). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` de origem `C` na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote vão do `int16` ao escore. Se o marco, a cadeia **ou** a decimação falharam, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. A trava nas três conferências é de propósito: se só o marco falhar (a LDA ou os cabeçalhos do modelo incoerentes), a demonstração não roda, mesmo com a `CADEIA OK`, porque ela usa o mesmo `lda_escore()`; e se só a decimação falhar, o firmware tem um erro de porte que só a serial mostraria, e numa demonstração ninguém olha a serial. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) fica aceso depois da conferência.
+6. em laço, **demonstração nos LEDs com a cadeia**: cada volta começa pela **inferência de ponta a ponta** (o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, com uma linha `ponta ...` e o `$SEG` de origem `D`; seção "Primeira inferência de ponta a ponta") e segue pelos 10 segmentos dos clipes em ordem, cada um processado de novo na hora (`mfcc_segmento()` → `lda_escore()`). LED verde = normal, vermelho = falha, por 2 s, com uma linha `demo ...` e o pacote `$SEG` de origem `C` na serial (seção "Pacote da serial"). Os `ciclos` da linha `demo` e do pacote vão do `int16` ao escore. Se o marco, a cadeia **ou** a decimação falharam, os dois LEDs piscam juntos e rápido (isso não é uma decisão) e a serial repete o aviso. A trava nas três conferências é de propósito: se só o marco falhar (a LDA ou os cabeçalhos do modelo incoerentes), a demonstração não roda, mesmo com a `CADEIA OK`, porque ela usa o mesmo `lda_escore()`; e se só a decimação falhar, o firmware tem um erro de porte que só a serial mostraria, e numa demonstração ninguém olha a serial. O mesmo padrão aparece num segmento cujo pacote sai com erro (escore não finito, `disparou = 4`). O LED da placa (PC13) acende no começo da conferência do marco e fica aceso até o reset, mesmo se ela falhar. A tabela de todos os estados está na seção "Sinalização por LED".
 
    A demonstração com as características prontas (`marco_lda_passo()`, origem `R`) foi removida em 20/10; o marco ficou só como conferência no boot.
 
@@ -398,7 +398,7 @@ $SEG,1,7,R,2,1043,F,1,231.475,0,,,412*69
 
 **Sentidos das comparações.** A LDA dá falha com escore **≥ 0** e o detector de novidade com pontuação **> limiar**, os mesmos sentidos do Python. A placa decide pelo `float`. **No escore da LDA, o sinal do texto é sempre o da decisão:** todo escore negativo sai com `-`, inclusive o que arredonda a zero (−0,0004 sai `-0.000`, decisão `N`). O `-0.0f` não é negativo (`-0.0f < 0` é falso), então sai `0.000` e é falha, como no `lda_e_falha()`. Assim, o painel pode ler a decisão da LDA pelo sinal do texto, sem exceção na fronteira; em Python, use o sinal da string, porque `float("-0.000") >= 0` é verdadeiro. O formatador do marco (`texto_fixo()`) continua sem `-0.000`; o `-` é posto só no `pacote_linha()`. Na novidade (campos reservados), quando a pontuação e o limiar arredondam para o mesmo valor, vale o campo de decisão.
 
-**Erro (disparou = 4).** Se o escore da LDA, ou a pontuação ou o limiar de novidade com detector adotado, não for finito (NaN ou infinito), o pacote sai com `disparou = 4`, sozinho, e decisão `F`, e a placa pisca os dois LEDs juntos em vez de acender um deles. Num detector de falha, uma conta que deu errado não pode aparecer como "normal": `NaN >= 0` é falso, e sem esse bit um escore NaN sairia `N` com o LED verde. O texto do valor mostra o problema (`nan`, `inf` ou `-inf`). Hoje a cadeia não gera NaN com entrada válida (o log tem o épsilon e o Welford divide por n ≥ 1); o caso provável é futuro, a pontuação do pente com fundo zero (infinito menos infinito). Um `inf` **sem** o bit de erro também pode aparecer: é um valor finito grande demais para o texto (≥ ~4 × 10⁶ com 3 casas), e o sinal dele continua valendo. O painel mostra "erro" para o 4.
+**Erro (disparou = 4).** Se o escore da LDA, ou a pontuação ou o limiar de novidade com detector adotado, não for finito (NaN ou infinito), o pacote sai com `disparou = 4`, sozinho, e decisão `F`, e a placa mostra os dois LEDs juntos em vez de acender um deles: piscando por 2 s na demonstração, acesos fixos no modo de recepção (seção "Sinalização por LED"). Num detector de falha, uma conta que deu errado não pode aparecer como "normal": `NaN >= 0` é falso, e sem esse bit um escore NaN sairia `N` com o LED verde. O texto do valor mostra o problema (`nan`, `inf` ou `-inf`). Hoje a cadeia não gera NaN com entrada válida (o log tem o épsilon e o Welford divide por n ≥ 1); o caso provável é futuro, a pontuação do pente com fundo zero (infinito menos infinito). Um `inf` **sem** o bit de erro também pode aparecer: é um valor finito grande demais para o texto (≥ ~4 × 10⁶ com 3 casas), e o sinal dele continua valendo. O painel mostra "erro" para o 4.
 
 **Pente (D1/D1b), que tem duas séries.** Vai a série com a maior diferença pontuação − limiar (em dB), e o código diz qual (1 ou 2). Em empate, vai a BPFO. O painel mostra a pontuação e o limiar, não a diferença.
 
@@ -891,6 +891,8 @@ python3 tests/host/recepcao/enviar_segmento.py --porta /dev/pts/N --todos
 python3 tests/host/recepcao/enviar_segmento.py --porta /dev/pts/N --seg 88 --estragar crc --ja-no-modo
 ```
 
+Com `--leds`, o emulador escreve na saída de erro uma linha `led verde=V vermelho=R` a cada vez que o modo mexe nos LEDs (seção "Sinalização por LED"); a serial não muda.
+
 Resultado em 30/10: os 10 segmentos dos clipes com o escore bit a bit igual ao da linha `ref`; `crc`, `versao`, `formato`, `tamanho` e `truncado` com o `$ERR` certo; a mágica corrompida ignorada e o quadro certo de trás aceito. Com `--baud 0` (os bytes de uma vez, o anel sobrescrito antes de o laço ler), os quadros corrompidos voltam como `$ERR` e nenhum `$SEG` sai com escore errado. Com `--erro-uart 5000`, o quadro do erro de linha volta como `$ERR truncado` e o seguinte passa.
 
 Com `--travar-ms M`, o laço da placa trava uma vez por M ms (dentro do `HAL_GetTick()`) quando o primeiro quadro passa de 5.000 B, e os bytes continuam chegando. Resultado em 04/11, a 921.600 bit/s:
@@ -949,6 +951,73 @@ Captura de 30/10 (build Debug padrão, 115.200 bit/s), versionada em [`docs/rece
 | **total** (relatório do linker: 444.924 → 449.740 B de flash, 31.744 → 34.912 B de RAM) | **+4.816** | **+3.168** |
 
 Sobram 72,8 KiB de flash e 93,9 KiB de RAM. Com o contador de voltas do anel (04/11): +496 B de flash e +80 B de RAM (450.236 B e 34.992 B); sobram 72,3 KiB de flash e 93,8 KiB de RAM.
+
+## Sinalização por LED
+
+O verde e o vermelho existem desde o marco de 13/10 e mostram a decisão nos dois modos do laço: a demonstração (clipes da flash, desde 20/10, em `cadeia_clipes.c`, e o recorte decimado, desde 22/10, em `decimacao.c`) e a recepção pela serial (desde 30/10, em `recepcao_serial.c`). O LED mostra a **decisão da placa**, a mesma do `$SEG`, e não a classe verdadeira do motor: um segmento normal que o modelo chama de falha acende o vermelho. Fiação e pinos na seção "Hardware" (PB0 e PB1 acendem em nível alto; o PC13 da placa, em nível baixo).
+
+### Estados
+
+| Estado | Verde (PB0) | Vermelho (PB1) | Demonstração | Recepção pela serial |
+|---|:---:|:---:|---|---|
+| normal (`$SEG` com decisão `N`) | aceso | apagado | 2 s, depois 0,3 s apagado | fixo até a próxima resposta |
+| falha (`$SEG` com decisão `F`, `disparou` 1 ou 2) | apagado | aceso | 2 s, depois 0,3 s apagado | fixo até a próxima resposta |
+| erro de conta (`disparou = 4`: escore não finito) | aceso | aceso | os dois piscando juntos a 4 Hz (125 ms aceso, 125 ms apagado) por 2 s, depois 0,3 s apagado | os dois fixos até a próxima resposta |
+| conferência do boot reprovada (marco, cadeia ou decimação) | pisca | pisca | os dois piscando juntos a 4 Hz sem parar, com uma linha `ERRO:` a cada 2 s | o modo é recusado (`recepcao recusada`) e o pisca continua |
+| aguardando | apagado | apagado | durante a conferência do boot e a conta de cada segmento (~0,06 s nos clipes, ~0,18 s no decimado) | ao entrar no modo, até o primeiro `$SEG` |
+| erro de recepção (`$ERR`) | apagado | apagado | (não existe) | fixo até a próxima resposta |
+
+O **LED da placa** (PC13) não mostra decisão: apagado desde o reset, acende no começo da conferência do marco e fica aceso até o reset, mesmo se a conferência falhar. Aceso quer dizer que o firmware passou da inicialização e chegou ao marco; quem diz se a conferência passou é o par verde e vermelho. Com `-DBLOCOS13=ON`, ele só acende depois dos blocos 1 a 3 (~100 s a 115.200 bit/s).
+
+**Erro de conta nos dois modos.** O verde sozinho nunca aparece num erro de conta (um escore NaN faria `NaN >= 0` falso e passaria por normal). Na demonstração os dois piscam, como no boot reprovado, e a serial diz qual dos dois foi (`ERRO:` no boot, `$SEG` com `disparou = 4` num segmento). No modo de recepção os dois ficam acesos fixos: piscar seguraria o laço por 2 s antes do `$PED`. Hoje a cadeia não gera NaN com entrada válida (seção "Pacote da serial"), então esse estado só aparece com um defeito.
+
+### A demonstração
+
+Cada volta do laço tem 11 decisões, sempre na mesma ordem: a inferência de ponta a ponta (o recorte do segmento 29 a 51,2 kHz, origem `D`) e os 10 segmentos dos clipes (origem `C`). Com o modelo `exp239`, a sequência dos LEDs é:
+
+| Ordem | Origem | Segmento | Clipe | LED |
+|---:|:---:|---:|---|---|
+| 1 | D | 29 | normal | verde |
+| 2 | C | 29 | normal | verde |
+| 3 | C | 30 | normal | verde |
+| 4 a 11 | C | 88, 89, 147, 148, 206, 207, 265, 266 | bpfi e bpfo, 0,3 e 1,0 mm | vermelho |
+
+Cada decisão fica 2 s acesa e é seguida de ~0,36 s apagado (os 0,3 s do `cadeia_mostrar()` e a conta do segmento seguinte, ~0,06 s); antes do `D`, a pausa apagada é de ~0,48 s, porque a decimação soma ~0,12 s. Uma volta leva cerca de 26 s. Como há um apagado entre duas decisões, dois vermelhos seguidos aparecem como dois.
+
+### O modo de recepção
+
+Os LEDs apagam ao entrar no modo. Cada `$SEG` acende o LED da decisão logo depois da linha `rx` e do `$SEG` na serial, e ele fica aceso, sem tempo marcado, até a próxima resposta: o `$SEG` do segmento seguinte troca a cor, e um `$ERR` apaga os dois. Enquanto o quadro seguinte chega (~0,3 s a 921.600 bit/s), o LED ainda mostra a decisão anterior. Duas decisões iguais seguidas não piscam entre si: para conferir uma por uma, o `matriz_serial_placa.py` (repositório do Python) tem o `--pausa S`, que espera S segundos depois de cada resposta e mostra as decisões do Python e da placa e a cor esperada.
+
+### Testar no PC (emulador)
+
+Com `--leds`, o `emular_placa` escreve na saída de erro uma linha por chamada do `leds()` do modo de recepção (quando o verde e o vermelho já foram escritos, em qualquer ordem): uma ao entrar no modo e uma por `$SEG` ou `$ERR`, na ordem deles na serial. Com o `--salvar` do `enviar_segmento.py`, as duas listas se casam linha a linha:
+
+```bash
+cmake -S tests/host/harness -B build/harness -G Ninja && cmake --build build/harness
+./build/harness/emular_placa --leds 2> build/leds.log &       # imprime a porta: /dev/pts/N
+python3 tests/host/recepcao/enviar_segmento.py --porta /dev/pts/N --todos --erros --seg 88 --salvar build/emulador.log
+grep -E '^\$(SEG|ERR)' build/emulador.log | cut -d, -f1-7 | paste - <(tail -n +2 build/leds.log)
+```
+
+Resultado em 19/11: 17 linhas de LED para 16 respostas, com a primeira (`verde=0 vermelho=0`) na entrada do modo. Os 2 `$SEG` com `N` (29 e 30) deram `verde=1 vermelho=0`; os 8 com `F` (88 a 266) e o 88 mandado depois dos erros deram `verde=0 vermelho=1`; e os 5 `$ERR` (`crc`, `versao`, `formato`, `tamanho` e `truncado`) deram `verde=0 vermelho=0`. A mágica corrompida não tem resposta e não mexe nos LEDs. O erro de conta não é exercitado: a cadeia não gera escore não finito com entrada válida, e o estado está conferido no código (`responder_segmento()`) e no `test_pacote_serial` (o `disparou = 4` com decisão `F`). A demonstração não roda no emulador; os tempos dela saem dos `HAL_Delay` do `cadeia_clipes.c` e são conferidos na placa.
+
+### Testar na placa
+
+Com o circuito da seção "Hardware" e o build padrão (Debug) gravado:
+
+1. **Demonstração.** Abra a serial (`ler_pacotes.py --porta ... --salvar`, ou o picocom), aperte o RESET e acompanhe pelo menos uma volta inteira: o LED de cada decisão tem de ser o do `$SEG` que acabou de sair (`N` verde, `F` vermelho), na ordem da tabela acima, com o apagado entre duas decisões, e o LED da placa aceso desde o começo da conferência.
+2. **Recepção, com ruído.** Pelo `matriz_serial_placa.py --lista` (repositório do Python), mande um grupo misto da robustez ao ruído com `--ids` e `--pausa`, alternando normal e falha na decisão do Python, com os dois casos que mais importam para o LED: um segmento perto do limiar e falsos alarmes (normais que o modelo chama de falha com o ruído, como o 3 do branco a 0 dB e o 5047 do rosa a 5 dB). Na semente principal (20260925), o mais perto do limiar é o 48 do branco a 0 dB (|s| = 0,676, 1,6 E, normal); no recorte inteiro, com as dez sementes, é o `3:500057` (o 57 do branco a 0 dB na semente 5, |s| = 0,539, 1,3 E, normal). Em cada pausa, o script mostra a decisão do Python, a da placa (do `$SEG`) e a cor que o LED tem de ter, pela da placa, com `DIVERGE` se as duas diferirem; o LED tem de ter essa cor, e no fim a matriz confere a placa contra o Python.
+3. **Erro de recepção.** `enviar_segmento.py --todos --erros --seg 88`: em cada `$ERR`, os dois LEDs apagam.
+
+### Resultado na placa
+
+Teste de 19/11, build Debug padrão, com o circuito da seção "Hardware" a 921.600 bit/s:
+
+- **Demonstração** (captura em [`docs/leds-placa-19-11.log`](docs/leds-placa-19-11.log), 60 s a partir do RESET): o LED de cada decisão foi o do `$SEG` que acabava de sair, na ordem da tabela (o `D` e os dois primeiros `C` verdes, os 8 seguintes vermelhos), com o apagado entre duas decisões, e o LED da placa acendeu no boot e ficou aceso. O resumo dá 27 pacotes certos, 0 descartados, 0 perdidos e 0 reinícios: 3 `D` (todos `N`) e 22 `C` com as decisões do CSV. A primeira linha da captura é um `$SEG` da volta anterior ao RESET.
+- **Recepção com ruído** (captura em [`docs/leds-ruido-19-11.log`](docs/leds-ruido-19-11.log)): os 10 segmentos do grupo misto (`matriz_serial_placa.py --lista --ids 3:48,3:3,3:57,3:59,3:44,3:50,4:5000,4:5047,3:54,3:60 --pausa 4`, alternando normal e falha na decisão do Python) acenderam, em cada pausa, a cor que o script mostrava. A concordância placa × Python deu 8/8 no branco e 2/2 no rosa, com o critério da rodada aprovado nos dois (|Δs|/E máximo de 0,00089). Isso inclui o segmento mais perto do limiar na semente principal (48 do branco a 0 dB, |s| = 0,676, verde; no recorte inteiro, o mais perto é o `3:500057`, que fica para uma próxima rodada do `--ids`) e os três falsos alarmes (3 e 50 do branco a 0 dB, 5047 do rosa a 5 dB, vermelhos): o LED mostra a decisão do modelo, não a classe do motor. A captura saiu do `matriz_serial_placa.py` do PR #40 do Python (commit `87bf4f5`, onde entram o `--ids` e o `--pausa`), rodado antes desse commit: por isso o cabeçalho dela diz `commit=538c395`. Quem for refazer precisa do `87bf4f5` ou de um posterior. Como é ensaio, ela não entra no registry.
+- **Erro de recepção:** com o `enviar_segmento.py --todos --erros --seg 88`, os 10 segmentos dos clipes passaram bit a bit (2 verdes, 8 vermelhos), os dois LEDs apagaram nos cinco `$ERR` e voltaram ao vermelho no 88 do fim.
+
+Nenhum estado diferiu da tabela, e o firmware não mudou.
 
 ## Tempo e pilha: build de medida (novembro)
 
@@ -1070,4 +1139,5 @@ Resultado em 20/10 (build Debug com gcc 13.2.1, branch da cadeia completa, depoi
 - **22/10:** primeira inferência de ponta a ponta no laço normal: o recorte de 51,2 kHz decimado e passado pela cadeia até o escore, a cada volta da demonstração, com o LED da decisão e o `$SEG` de origem `D`.
 - **29 a 31/10:** recepção de segmentos pela serial (seção "Recepção de segmentos pela serial"): o formato do quadro (29/10), o parser em fluxo, o modo de recepção, o script mínimo, o emulador no PC e o teste na placa a 115.200 bit/s (30/10) e o teste a 921.600 bit/s (31/10), para rodar os 295 segmentos do Jung e os 40 do HUSTmotor na placa.
 - **Novembro:** caracterização de tempo e memória (seção "Tempo e pilha: build de medida"): pilha estática pelo grafo de chamadas, build de medida com a linha `med` e a rodada dos 295 + 40 com a E/S separada do processamento.
-- **Depois:** o painel no computador (20/11) e a sinalização por LED.
+- **19/11:** sinalização por LED documentada e testada (seção "Sinalização por LED"): a tabela de estados dos dois modos, a conferência no emulador e o teste com o circuito, nos dois modos e com um grupo misto da robustez ao ruído.
+- **Depois:** o painel no computador (20/11), conferido contra o LED, e o vídeo da demonstração.

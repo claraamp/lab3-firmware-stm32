@@ -26,6 +26,15 @@
  * dos ~22 ms que o anel de 2 KB aguenta a 921.600 bit/s, o anel estoura. A linha rx
  * tem de mostrar "anel=estourado" e estouros >= 1, a placa tem de responder $ERR
  * (truncado ou crc), e o quadro seguinte tem de passar com estouros=0.
+ *
+ * Com --leds, cada mudanca dos LEDs sai na saida de erro, numa linha
+ * "led verde=V vermelho=R" (fora da serial, que segue igual), quando os dois pinos
+ * ja foram escritos desde a ultima linha, em qualquer ordem: uma por chamada do
+ * leds() do recepcao_serial.c, ou seja, uma ao entrar no modo e uma por $SEG ou
+ * $ERR, na ordem deles na serial. Nao depende de o leds() escrever o verde primeiro.
+ * E o teste no PC da tabela de estados do README
+ * (secao "Sinalizacao por LED"): verde ou vermelho pela decisao de cada $SEG, os
+ * dois apagados ao entrar no modo e em cada $ERR.
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
@@ -56,6 +65,7 @@ static long baud = 921600;       /* --baud; 0 = sem ritmo */
 static long bytes_recebidos = 0;
 static long travar_ms = 0;       /* --travar-ms */
 static atomic_long bytes_no_anel = 0;   /* do armar do anel grande, para o --travar-ms */
+static int mostrar_leds = 0;     /* --leds */
 
 uint32_t emul_ndtr(void) { return atomic_load(&ndtr); }
 void emul_limpar_erros(void) {}
@@ -99,8 +109,23 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *h)
 void HAL_GPIO_WritePin(int porta, int pino, GPIO_PinState estado)
 {
     (void)porta;
-    (void)pino;
-    (void)estado;
+    static int verde = 0, vermelho = 0;
+    static int escritos = 0;   /* bit 0: verde, bit 1: vermelho, desde a ultima linha */
+    if (pino == LED_G_Pin) {
+        verde = estado == GPIO_PIN_SET;
+        escritos |= 1;
+    } else if (pino == LED_R_Pin) {
+        vermelho = estado == GPIO_PIN_SET;
+        escritos |= 2;
+    } else {
+        return;                /* o PC13 e outros pinos nao entram */
+    }
+    if (escritos == 3) {
+        if (mostrar_leds) {
+            fprintf(stderr, "led verde=%d vermelho=%d\n", verde, vermelho);
+        }
+        escritos = 0;
+    }
 }
 
 uint32_t HAL_GetTick(void)
@@ -161,6 +186,11 @@ static void *dma(void *arg)
 
 int main(int argc, char **argv)
 {
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--leds") == 0) {
+            mostrar_leds = 1;
+        }
+    }
     for (int i = 1; i + 1 < argc; ++i) {
         if (strcmp(argv[i], "--erro-uart") == 0) {
             erro_no_byte = atol(argv[i + 1]);
