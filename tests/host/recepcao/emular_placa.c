@@ -28,9 +28,10 @@
  * (truncado ou crc), e o quadro seguinte tem de passar com estouros=0.
  *
  * Com --leds, cada mudanca dos LEDs sai na saida de erro, numa linha
- * "led verde=V vermelho=R" (fora da serial, que segue igual): o leds() do
- * recepcao_serial.c escreve o verde e depois o vermelho, e a linha sai depois do
- * vermelho: uma ao entrar no modo e uma por $SEG ou $ERR, na ordem deles na serial.
+ * "led verde=V vermelho=R" (fora da serial, que segue igual), quando os dois pinos
+ * ja foram escritos desde a ultima linha, em qualquer ordem: uma por chamada do
+ * leds() do recepcao_serial.c, ou seja, uma ao entrar no modo e uma por $SEG ou
+ * $ERR, na ordem deles na serial. Nao depende de o leds() escrever o verde primeiro.
  * E o teste no PC da tabela de estados do README
  * (secao "Sinalizacao por LED"): verde ou vermelho pela decisao de cada $SEG, os
  * dois apagados ao entrar no modo e em cada $ERR.
@@ -108,11 +109,22 @@ HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *h)
 void HAL_GPIO_WritePin(int porta, int pino, GPIO_PinState estado)
 {
     (void)porta;
-    static int verde = 0;
+    static int verde = 0, vermelho = 0;
+    static int escritos = 0;   /* bit 0: verde, bit 1: vermelho, desde a ultima linha */
     if (pino == LED_G_Pin) {
         verde = estado == GPIO_PIN_SET;
-    } else if (pino == LED_R_Pin && mostrar_leds) {
-        fprintf(stderr, "led verde=%d vermelho=%d\n", verde, estado == GPIO_PIN_SET);
+        escritos |= 1;
+    } else if (pino == LED_R_Pin) {
+        vermelho = estado == GPIO_PIN_SET;
+        escritos |= 2;
+    } else {
+        return;                /* o PC13 e outros pinos nao entram */
+    }
+    if (escritos == 3) {
+        if (mostrar_leds) {
+            fprintf(stderr, "led verde=%d vermelho=%d\n", verde, vermelho);
+        }
+        escritos = 0;
     }
 }
 
